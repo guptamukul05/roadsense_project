@@ -173,10 +173,11 @@ def resolve_geo_fields(
     lng_in: str,
     media_path: Optional[str] = None,
     media_kind: Optional[str] = None,
-) -> tuple[str, str, str, str]:
+) -> tuple[Optional[float], Optional[float], str, str]:
     """
     Fill lat/lng from EXIF or video metadata when form fields are empty;
     reverse-geocode to city, state.
+    Returns lat/lng as floats when coordinates exist, else None.
     """
     lat = (lat_in or "").strip()
     lng = (lng_in or "").strip()
@@ -189,7 +190,15 @@ def resolve_geo_fields(
         if elat is not None and elng is not None:
             lat, lng = str(elat), str(elng)
     city, state, _ = enrich_location_strings(lat, lng)
-    return lat, lng, city, state
+    lat_f: Optional[float] = None
+    lng_f: Optional[float] = None
+    if lat and lng:
+        try:
+            lat_f = round(float(lat), 6)
+            lng_f = round(float(lng), 6)
+        except ValueError:
+            pass
+    return lat_f, lng_f, city, state
 
 
 def merge_manual_city_state(
@@ -334,8 +343,8 @@ def detect_location():
 
     geo = reverse_geocode(lat, lng)
     return jsonify({
-        "lat": lat,
-        "lng": lng,
+        "lat": round(float(lat), 6),
+        "lng": round(float(lng), 6),
         "city": geo.get("city") or "",
         "state": geo.get("state") or "",
         "source_gps": src,
