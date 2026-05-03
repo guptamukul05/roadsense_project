@@ -10,18 +10,29 @@ from flask import (
 )
 import cv2
 import os
+import shutil
+import subprocess
 import time
 import uuid
 import json
 import base64
 import threading
 import numpy as np
-from pathlib import Path
+import tempfile
 from datetime import datetime
-from werkzeug.utils import secure_filename
+from pathlib import Path
+from typing import Optional
 
 from ultralytics import YOLO
 import supervision as sv
+
+from location_utils import (
+    enrich_location_strings,
+    extract_gps_from_image_path,
+    extract_gps_from_video_path,
+    extract_gps_from_upload,
+    reverse_geocode,
+)
 
 # ─── APP CONFIG ───────────────────────────────────────────────
 app = Flask(__name__)
@@ -63,21 +74,19 @@ try:
     if MODEL1_PATH.is_file():
         model1 = YOLO(str(MODEL1_PATH))
         names1 = model1.names
-        print("✅ Model 1 loaded")
     else:
-        print(f"⚠️  Model 1 not found at {MODEL1_PATH}")
+        print(f"Model 1 not found at {MODEL1_PATH}")
 except Exception as e:
-    print(f"❌ Model 1 failed: {e}")
+    print(f"Model 1 failed to load: {e}")
 
 try:
     if MODEL2_PATH.is_file():
         model2 = YOLO(str(MODEL2_PATH))
         names2 = model2.names
-        print("✅ Model 2 loaded")
     else:
-        print(f"⚠️  Model 2 not found at {MODEL2_PATH}")
+        print(f"Model 2 not found at {MODEL2_PATH}")
 except Exception as e:
-    print(f"❌ Model 2 failed: {e}")
+    print(f"Model 2 failed to load: {e}")
 
 # ─── SUPERVISION ANNOTATORS ───────────────────────────────────
 box1   = sv.BoxAnnotator(thickness=2, color=sv.Color.RED)
@@ -158,6 +167,79 @@ def save_history(entry):
     with open(app.config["HISTORY_FILE"], "w") as f:
         json.dump(history, f)
 
+
+def resolve_geo_fields(
+    lat_in: str,
+    lng_in: str,
+    media_path: Optional[str] = None,
+    media_kind: Optional[str] = None,
+) -> tuple[Optional[float], Optional[float], str, str]:
+    """
+    Fill lat/lng from EXIF or video metadata when form fields are empty;
+    reverse-geocode to city, state.
+    Returns lat/lng as floats when coordinates exist, else None.
+    """
+    lat = (lat_in or "").strip()
+    lng = (lng_in or "").strip()
+    if (not lat or not lng) and media_path and media_kind == "image":
+        elat, elng, _ = extract_gps_from_image_path(media_path)
+        if elat is not None and elng is not None:
+            lat, lng = str(elat), str(elng)
+    elif (not lat or not lng) and media_path and media_kind == "video":
+        elat, elng, _ = extract_gps_from_video_path(media_path)
+        if elat is not None and elng is not None:
+            lat, lng = str(elat), str(elng)
+    city, state, _ = enrich_location_strings(lat, lng)
+    lat_f: Optional[float] = None
+    lng_f: Optional[float] = None
+    if lat and lng:
+        try:
+            lat_f = round(float(lat), 6)
+            lng_f = round(float(lng), 6)
+        except ValueError:
+            pass
+    return lat_f, lng_f, city, state
+
+
+def merge_manual_city_state(
+    city: str,
+    state: str,
+    city_form: str,
+    state_form: str,
+) -> tuple[str, str]:
+    """Non-empty `city` / `state` form fields override reverse-geocoded values."""
+    c = (city_form or "").strip()
+    s = (state_form or "").strip()
+    if c:
+        city = c
+    if s:
+        state = s
+    return city, state
+
+
+def transcode_mp4_h264_web(src_path: str, dst_path: str) -> bool:
+    """H.264 + yuv420p + faststart — HTML5 `<video>` compatible (OpenCV mp4v often is not)."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return False
+    try:
+        subprocess.run(
+            [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", src_path,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-an",
+                dst_path,
+            ],
+            check=True,
+            timeout=3600,
+        )
+        return os.path.isfile(dst_path) and os.path.getsize(dst_path) > 0
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
+
 def frame_to_b64(frame):
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return base64.b64encode(buf).decode()
@@ -217,6 +299,59 @@ def index():
                            model1_available=model1 is not None,
                            model2_available=model2 is not None)
 
+
+@app.route("/api/geocode/reverse", methods=["GET", "POST"])
+def api_geocode_reverse():
+    """Return Nominatim city / state for lat, lon (server-side only)."""
+    lat = lon = None
+    if request.method == "POST":
+        data = request.get_json(silent=True)
+        if data:
+            lat = data.get("lat")
+            lon = data.get("lon", data.get("lng"))
+        if lat is None and request.form:
+            lat = request.form.get("lat")
+            lon = request.form.get("lon", request.form.get("lng"))
+    if lat is None:
+        lat = request.args.get("lat")
+        lon = request.args.get("lon", request.args.get("lng"))
+    try:
+        lat_f = float(lat)
+        lon_f = float(lon)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid lat or lon"}), 400
+    geo = reverse_geocode(lat_f, lon_f)
+    return jsonify({
+        "city": geo.get("city") or "",
+        "state": geo.get("state") or "",
+    })
+
+
+@app.route("/detect/location", methods=["POST"])
+def detect_location():
+    """Extract GPS from image EXIF or video metadata, then reverse-geocode via Nominatim."""
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({"error": "No file provided"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_IMAGES and ext not in ALLOWED_VIDEOS:
+        return jsonify({"error": "Invalid file format"}), 400
+
+    lat, lng, src, err = extract_gps_from_upload(file, ext, ALLOWED_IMAGES, ALLOWED_VIDEOS)
+    if lat is None or lng is None:
+        return jsonify({"error": err or "No GPS metadata found"}), 400
+
+    geo = reverse_geocode(lat, lng)
+    return jsonify({
+        "lat": round(float(lat), 6),
+        "lng": round(float(lng), 6),
+        "city": geo.get("city") or "",
+        "state": geo.get("state") or "",
+        "source_gps": src,
+        "reverse_geocode_error": geo.get("error"),
+    })
+
+
 # ── IMAGE UPLOAD ──
 @app.route("/detect/image", methods=["POST"])
 def detect_image():
@@ -225,9 +360,10 @@ def detect_image():
     use_m2  = request.form.get("use_m2") == "true"
     conf1   = float(request.form.get("conf1", DEFAULT_CONF1))
     conf2   = float(request.form.get("conf2", DEFAULT_CONF2))
-    lat     = request.form.get("lat", "")
-    lng     = request.form.get("lng", "")
-    loc     = request.form.get("loc", "")
+    lat        = request.form.get("lat", "")
+    lng        = request.form.get("lng", "")
+    city_form  = request.form.get("city", "").strip()
+    state_form = request.form.get("state", "").strip()
 
     if not file or file.filename == "":
         return jsonify({"error": "No file provided"}), 400
@@ -238,6 +374,9 @@ def detect_image():
     fname    = f"{uuid.uuid4().hex}.{ext}"
     fpath    = os.path.join(app.config["UPLOAD_FOLDER"], fname)
     file.save(fpath)
+
+    lat, lng, city, state = resolve_geo_fields(lat, lng, fpath, "image")
+    city, state = merge_manual_city_state(city, state, city_form, state_form)
 
     img = cv2.imread(fpath)
     if img is None:
@@ -259,7 +398,9 @@ def detect_image():
         "detections": detections,
         "score":      score,
         "severity":   severity_label(score),
-        "lat": lat, "lng": lng, "loc": loc,
+        "lat": lat, "lng": lng,
+        "city":  city,
+        "state": state,
     }
     save_history(entry)
 
@@ -270,6 +411,10 @@ def detect_image():
         "score":        score,
         "severity":     severity_label(score),
         "entry_id":     entry["id"],
+        "lat":          lat,
+        "lng":          lng,
+        "city":         city,
+        "state":        state,
     })
 
 # ── VIDEO UPLOAD ──
@@ -280,9 +425,10 @@ def detect_video():
     use_m2 = request.form.get("use_m2") == "true"
     conf1  = float(request.form.get("conf1", DEFAULT_CONF1))
     conf2  = float(request.form.get("conf2", DEFAULT_CONF2))
-    lat    = request.form.get("lat", "")
-    lng    = request.form.get("lng", "")
-    loc    = request.form.get("loc", "")
+    lat        = request.form.get("lat", "")
+    lng        = request.form.get("lng", "")
+    city_form  = request.form.get("city", "").strip()
+    state_form = request.form.get("state", "").strip()
 
     if not file or file.filename == "":
         return jsonify({"error": "No file provided"}), 400
@@ -290,56 +436,167 @@ def detect_video():
     if ext not in ALLOWED_VIDEOS:
         return jsonify({"error": "Invalid video format"}), 400
 
-    fname = f"{uuid.uuid4().hex}.{ext}"
-    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
-    file.save(fpath)
+    input_tmp_path = None
+    output_tmp_path = None
+    cap = None
+    writer = None
+    
+    try:
+        # ─── SAVE INPUT TO TEMP FILE ───
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            input_tmp_path = tmp.name
+            tmp.write(file.read())
 
-    rname = f"result_{uuid.uuid4().hex}.mp4"
-    rpath = os.path.join(app.config["RESULT_FOLDER"], rname)
+        lat, lng, city, state = resolve_geo_fields(lat, lng, input_tmp_path, "video")
+        city, state = merge_manual_city_state(city, state, city_form, state_form)
 
-    cap = cv2.VideoCapture(fpath)
-    fps  = cap.get(cv2.CAP_PROP_FPS) or 25
-    w    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h    = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out  = cv2.VideoWriter(rpath, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        # ─── OPEN INPUT VIDEO ───
+        cap = cv2.VideoCapture(input_tmp_path)
+        if not cap.isOpened():
+            return jsonify({"error": "Cannot read input video"}), 400
+        
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        raw_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        if raw_fps <= 0.01 or raw_fps != raw_fps:  # missing, zero, or NaN
+            raw_fps = 30.0
+        fps = max(1.0, min(raw_fps, 120.0))
 
-    all_dets, all_scores = [], []
-    frame_idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        if frame_idx % 2 == 0:    # process every 2nd frame for speed
+        if width <= 1 or height <= 1:
+            return jsonify({"error": "Cannot read video dimensions"}), 400
+        
+        # Ensure even dimensions (required by many codecs)
+        width = width if width % 2 == 0 else width - 1
+        height = height if height % 2 == 0 else height - 1
+        
+        # ─── CREATE OUTPUT TEMP FILE ───
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            output_tmp_path = tmp.name
+        
+        # ─── INITIALIZE VIDEO WRITER ───
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(output_tmp_path, fourcc, fps, (width, height))
+        
+        if not writer.isOpened():
+            return jsonify({"error": "VideoWriter initialization failed"}), 500
+
+        # ─── PROCESS VIDEO ───
+        all_dets, all_scores = [], []
+        frame_idx = 0
+        
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            if frame is None or frame.size == 0:
+                frame_idx += 1
+                continue
+            
+            # Resize if needed
+            if frame.shape[1] != width or frame.shape[0] != height:
+                frame = cv2.resize(frame, (width, height))
+            
             ann, dets, score = process_frame(frame, use_m1, use_m2, conf1, conf2)
             all_dets.extend(dets)
             all_scores.append(score)
-            last_ann = ann
-        out.write(last_ann if frame_idx % 2 == 1 else ann)
-        frame_idx += 1
-
-    cap.release(); out.release()
-
-    avg_score = round(sum(all_scores)/len(all_scores)) if all_scores else 1
-
-    entry = {
-        "id":         uuid.uuid4().hex[:8],
-        "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "type":       "video",
-        "original":   fname,
-        "result":     rname,
-        "detections": all_dets[:20],
-        "score":      avg_score,
-        "severity":   severity_label(avg_score),
-        "lat": lat, "lng": lng, "loc": loc,
-    }
-    save_history(entry)
-
-    return jsonify({
-        "result_url": url_for("static", filename=f"results/{rname}"),
-        "detections": all_dets[:20],
-        "score":      avg_score,
-        "severity":   severity_label(avg_score),
-        "entry_id":   entry["id"],
-    })
+            
+            # Ensure proper format
+            if ann is None or ann.size == 0:
+                ann = frame
+            if ann.dtype != np.uint8:
+                ann = np.uint8(np.clip(ann, 0, 255))
+            if ann.shape != (height, width, 3):
+                ann = cv2.resize(ann, (width, height))
+            
+            writer.write(ann)
+            
+            frame_idx += 1
+        
+        # ─── FINALIZE (release once; finally must not double-release or MP4 moov is corrupted)
+        if cap is not None:
+            cap.release()
+            cap = None
+        if writer is not None:
+            writer.release()
+            writer = None
+        
+        # OpenCV's mp4v is MPEG-4 Part 2 — often won't play in Safari / some browsers
+        if os.path.exists(output_tmp_path) and os.path.getsize(output_tmp_path) > 0:
+            fd, web_tmp = tempfile.mkstemp(suffix=".mp4")
+            os.close(fd)
+            if transcode_mp4_h264_web(output_tmp_path, web_tmp):
+                try:
+                    os.remove(output_tmp_path)
+                except OSError:
+                    pass
+                output_tmp_path = web_tmp
+            else:
+                try:
+                    os.remove(web_tmp)
+                except OSError:
+                    pass
+        
+        if os.path.exists(output_tmp_path):
+            # Move to final location
+            rname = f"result_{uuid.uuid4().hex}.mp4"
+            rpath = os.path.join(app.config["RESULT_FOLDER"], rname)
+            os.rename(output_tmp_path, rpath)
+        else:
+            return jsonify({"error": "Output file creation failed"}), 500
+        
+        # ─── SAVE HISTORY ───
+        avg_score = round(sum(all_scores)/len(all_scores)) if all_scores else 1
+        entry = {
+            "id":         uuid.uuid4().hex[:8],
+            "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type":       "video",
+            "original":   file.filename,
+            "result":     rname,
+            "detections": all_dets[:20],
+            "score":      avg_score,
+            "severity":   severity_label(avg_score),
+            "lat": lat, "lng": lng,
+            "city":  city,
+            "state": state,
+        }
+        save_history(entry)
+        
+        return jsonify({
+            "result_url": url_for("static", filename=f"results/{rname}"),
+            "detections": all_dets[:20],
+            "score":      avg_score,
+            "severity":   severity_label(avg_score),
+            "entry_id":   entry["id"],
+            "lat":        lat,
+            "lng":        lng,
+            "city":       city,
+            "state":      state,
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Video processing error: {str(e)}"}), 500
+        
+    finally:
+        # Cleanup
+        if cap is not None:
+            cap.release()
+        if writer is not None:
+            writer.release()
+        
+        if input_tmp_path and os.path.exists(input_tmp_path):
+            try:
+                os.remove(input_tmp_path)
+            except OSError:
+                pass
+        
+        if output_tmp_path and os.path.exists(output_tmp_path):
+            try:
+                os.remove(output_tmp_path)
+            except OSError:
+                pass
 
 # ── LIVE CAMERA ──
 @app.route("/camera/start", methods=["POST"])

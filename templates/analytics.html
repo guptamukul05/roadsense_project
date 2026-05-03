@@ -433,6 +433,11 @@ const sevColor = s => s>=9?'#ff4444':s>=7?'#ff6b35':s>=4?'#ffcc00':'#7fff6b';
 const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
 const sevCat   = s => s>=9?'crit':s>=7?'high':s>=4?'med':'low';
 const sevChipCls = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
+function placeLabel(rec) {
+  const p = [rec.city, rec.state].filter(x => x && String(x).trim());
+  if (p.length) return p.join(', ');
+  return rec.loc || '';
+}
 
 // ── LOAD DATA ─────────────────────────────────────────────────
 async function loadData(){
@@ -510,10 +515,11 @@ function searchArea(){
   if(!q)return;
   searchQuery=q;
   filteredRecords=allRecords.filter(r=>{
+    const label=(placeLabel(r)||'').toLowerCase();
     const loc=(r.loc||'').toLowerCase();
-    const lat=(r.lat||'').toString().toLowerCase();
-    const lng=(r.lng||'').toString().toLowerCase();
-    return loc.includes(q)||lat.includes(q)||lng.includes(q);
+    const lat=(r.lat!=null?r.lat:'').toString().toLowerCase();
+    const lng=(r.lng!=null?r.lng:'').toString().toLowerCase();
+    return label.includes(q)||loc.includes(q)||lat.includes(q)||lng.includes(q);
   });
 
   const wrap=document.getElementById('searchNoteWrap');
@@ -556,14 +562,12 @@ function renderTable(){
     const s=rec.score||1;
     const conf=rec.detections&&rec.detections[0]?rec.detections[0].confidence:0;
 
-    // Collect all unique types from all detections
     const allTypes=rec.detections&&rec.detections.length
       ?[...new Set(rec.detections.map(d=>d.class).filter(Boolean))]
       :['Unknown'];
 
-    // Location display
-    const locDisplay=rec.loc&&rec.loc.trim()?rec.loc.trim():'Unknown location';
-    const gpsDisplay=rec.lat&&rec.lng
+    const locDisplay=placeLabel(rec)||(rec.loc&&rec.loc.trim()?rec.loc.trim():'')||'Unknown location';
+    const gpsDisplay=rec.lat!=null&&rec.lng!=null&&rec.lat!==''&&rec.lng!==''
       ?`${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E`
       :'No GPS';
 
@@ -604,14 +608,13 @@ function typeTag(t){
 
 // ── MAP ───────────────────────────────────────────────────────
 function renderMap(){
-  leafletMap=L.map('leaflet-map2',{zoomControl:true,attributionControl:false});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(leafletMap);
-
-  // Add pulse keyframes once
-  const st=document.createElement('style');
-  st.textContent='@keyframes mPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.22}50%{transform:translate(-50%,-50%) scale(1.65);opacity:0}}';
-  document.head.appendChild(st);
-
+  if(!leafletMap){
+    leafletMap=L.map('leaflet-map2',{zoomControl:true,attributionControl:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(leafletMap);
+    const st=document.createElement('style');
+    st.textContent='@keyframes mPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.22}50%{transform:translate(-50%,-50%) scale(1.65);opacity:0}}';
+    document.head.appendChild(st);
+  }
   buildMarkers();
   fitMap(allRecords);
 }
@@ -636,14 +639,14 @@ function buildMarkers(){
     const allTypes=rec.detections?[...new Set(rec.detections.map(d=>d.class).filter(Boolean))]:['Unknown'];
     const marker=L.marker([lat,lng],{icon}).addTo(leafletMap);
     marker.bindPopup(`<div style="font-family:'Space Mono',monospace;min-width:190px;font-size:12px">
-      <div style="font-weight:700;margin-bottom:5px">${rec.loc||'Unknown location'}</div>
+      <div style="font-weight:700;margin-bottom:5px">${placeLabel(rec)||'Unknown location'}</div>
       <div style="color:#555;margin-bottom:3px">📍 ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E</div>
       <div style="color:#777;margin-bottom:7px">Types: ${allTypes.join(', ')}</div>
       <span style="padding:2px 8px;border-radius:4px;background:${color}22;border:1px solid ${color};color:${color};font-weight:700">${sevLabel(s)} ${s}/10</span>
     </div>`);
     marker.on('click',()=>{
       document.getElementById('mapInfo').textContent=
-        `📍 ${rec.loc||'Unknown location'} · ${allTypes.join(', ')} · Sev ${s}/10`;
+        `📍 ${placeLabel(rec)||'Unknown location'} · ${allTypes.join(', ')} · Sev ${s}/10`;
     });
     allMarkers.push({marker,cat,rec});
   });
@@ -652,9 +655,11 @@ function buildMarkers(){
 }
 
 function refreshMapMarkers(){
-  // Determine which records to show
   let toShow=allRecords;
-  if(searchQuery)toShow=toShow.filter(r=>(r.loc||'').toLowerCase().includes(searchQuery));
+  if(searchQuery)toShow=toShow.filter(r=>{
+    const hay=((placeLabel(r)||'')+' '+(r.loc||'')).toLowerCase();
+    return hay.includes(searchQuery);
+  });
   if(activeFilter)toShow=toShow.filter(r=>sevCat(r.score||1)===activeFilter);
 
   const showIds=new Set(toShow.map(r=>r.id));
@@ -666,7 +671,6 @@ function refreshMapMarkers(){
     }
   });
 
-  // Fit to visible
   const visible=allMarkers.filter(({rec})=>showIds.has(rec.id));
   if(visible.length){
     const bounds=visible.map(({rec})=>[parseFloat(rec.lat),parseFloat(rec.lng)]);
@@ -677,7 +681,7 @@ function refreshMapMarkers(){
 }
 
 function fitMap(records){
-  const withGPS=records.filter(r=>r.lat&&r.lng);
+  const withGPS=records.filter(r=>r.lat!=null&&r.lng!=null&&r.lat!==''&&r.lng!=='');
   if(withGPS.length>1){
     leafletMap.fitBounds(withGPS.map(r=>[parseFloat(r.lat),parseFloat(r.lng)]),{padding:[40,40]});
   } else if(withGPS.length===1){
