@@ -21,9 +21,18 @@ import numpy as np
 import tempfile
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 from ultralytics import YOLO
 import supervision as sv
+
+from location_utils import (
+    enrich_location_strings,
+    extract_gps_from_image_path,
+    extract_gps_from_video_path,
+    extract_gps_from_upload,
+    reverse_geocode,
+)
 
 # ─── APP CONFIG ───────────────────────────────────────────────
 app = Flask(__name__)
@@ -158,6 +167,47 @@ def save_history(entry):
     with open(app.config["HISTORY_FILE"], "w") as f:
         json.dump(history, f)
 
+
+def resolve_geo_fields(
+    lat_in: str,
+    lng_in: str,
+    media_path: Optional[str] = None,
+    media_kind: Optional[str] = None,
+) -> tuple[str, str, str, str]:
+    """
+    Fill lat/lng from EXIF or video metadata when form fields are empty;
+    reverse-geocode to city, state.
+    """
+    lat = (lat_in or "").strip()
+    lng = (lng_in or "").strip()
+    if (not lat or not lng) and media_path and media_kind == "image":
+        elat, elng, _ = extract_gps_from_image_path(media_path)
+        if elat is not None and elng is not None:
+            lat, lng = str(elat), str(elng)
+    elif (not lat or not lng) and media_path and media_kind == "video":
+        elat, elng, _ = extract_gps_from_video_path(media_path)
+        if elat is not None and elng is not None:
+            lat, lng = str(elat), str(elng)
+    city, state, _ = enrich_location_strings(lat, lng)
+    return lat, lng, city, state
+
+
+def merge_manual_city_state(
+    city: str,
+    state: str,
+    city_form: str,
+    state_form: str,
+) -> tuple[str, str]:
+    """Non-empty `city` / `state` form fields override reverse-geocoded values."""
+    c = (city_form or "").strip()
+    s = (state_form or "").strip()
+    if c:
+        city = c
+    if s:
+        state = s
+    return city, state
+
+
 def transcode_mp4_h264_web(src_path: str, dst_path: str) -> bool:
     """H.264 + yuv420p + faststart — HTML5 `<video>` compatible (OpenCV mp4v often is not)."""
     ffmpeg = shutil.which("ffmpeg")
@@ -240,6 +290,59 @@ def index():
                            model1_available=model1 is not None,
                            model2_available=model2 is not None)
 
+
+@app.route("/api/geocode/reverse", methods=["GET", "POST"])
+def api_geocode_reverse():
+    """Return Nominatim city / state for lat, lon (server-side only)."""
+    lat = lon = None
+    if request.method == "POST":
+        data = request.get_json(silent=True)
+        if data:
+            lat = data.get("lat")
+            lon = data.get("lon", data.get("lng"))
+        if lat is None and request.form:
+            lat = request.form.get("lat")
+            lon = request.form.get("lon", request.form.get("lng"))
+    if lat is None:
+        lat = request.args.get("lat")
+        lon = request.args.get("lon", request.args.get("lng"))
+    try:
+        lat_f = float(lat)
+        lon_f = float(lon)
+    except (TypeError, ValueError):
+        return jsonify({"error": "Invalid lat or lon"}), 400
+    geo = reverse_geocode(lat_f, lon_f)
+    return jsonify({
+        "city": geo.get("city") or "",
+        "state": geo.get("state") or "",
+    })
+
+
+@app.route("/detect/location", methods=["POST"])
+def detect_location():
+    """Extract GPS from image EXIF or video metadata, then reverse-geocode via Nominatim."""
+    file = request.files.get("file")
+    if not file or file.filename == "":
+        return jsonify({"error": "No file provided"}), 400
+    ext = file.filename.rsplit(".", 1)[-1].lower()
+    if ext not in ALLOWED_IMAGES and ext not in ALLOWED_VIDEOS:
+        return jsonify({"error": "Invalid file format"}), 400
+
+    lat, lng, src, err = extract_gps_from_upload(file, ext, ALLOWED_IMAGES, ALLOWED_VIDEOS)
+    if lat is None or lng is None:
+        return jsonify({"error": err or "No GPS metadata found"}), 400
+
+    geo = reverse_geocode(lat, lng)
+    return jsonify({
+        "lat": lat,
+        "lng": lng,
+        "city": geo.get("city") or "",
+        "state": geo.get("state") or "",
+        "source_gps": src,
+        "reverse_geocode_error": geo.get("error"),
+    })
+
+
 # ── IMAGE UPLOAD ──
 @app.route("/detect/image", methods=["POST"])
 def detect_image():
@@ -248,9 +351,10 @@ def detect_image():
     use_m2  = request.form.get("use_m2") == "true"
     conf1   = float(request.form.get("conf1", DEFAULT_CONF1))
     conf2   = float(request.form.get("conf2", DEFAULT_CONF2))
-    lat     = request.form.get("lat", "")
-    lng     = request.form.get("lng", "")
-    loc     = request.form.get("loc", "")
+    lat        = request.form.get("lat", "")
+    lng        = request.form.get("lng", "")
+    city_form  = request.form.get("city", "").strip()
+    state_form = request.form.get("state", "").strip()
 
     if not file or file.filename == "":
         return jsonify({"error": "No file provided"}), 400
@@ -261,6 +365,9 @@ def detect_image():
     fname    = f"{uuid.uuid4().hex}.{ext}"
     fpath    = os.path.join(app.config["UPLOAD_FOLDER"], fname)
     file.save(fpath)
+
+    lat, lng, city, state = resolve_geo_fields(lat, lng, fpath, "image")
+    city, state = merge_manual_city_state(city, state, city_form, state_form)
 
     img = cv2.imread(fpath)
     if img is None:
@@ -282,7 +389,9 @@ def detect_image():
         "detections": detections,
         "score":      score,
         "severity":   severity_label(score),
-        "lat": lat, "lng": lng, "loc": loc,
+        "lat": lat, "lng": lng,
+        "city":  city,
+        "state": state,
     }
     save_history(entry)
 
@@ -293,6 +402,10 @@ def detect_image():
         "score":        score,
         "severity":     severity_label(score),
         "entry_id":     entry["id"],
+        "lat":          lat,
+        "lng":          lng,
+        "city":         city,
+        "state":        state,
     })
 
 # ── VIDEO UPLOAD ──
@@ -303,9 +416,10 @@ def detect_video():
     use_m2 = request.form.get("use_m2") == "true"
     conf1  = float(request.form.get("conf1", DEFAULT_CONF1))
     conf2  = float(request.form.get("conf2", DEFAULT_CONF2))
-    lat    = request.form.get("lat", "")
-    lng    = request.form.get("lng", "")
-    loc    = request.form.get("loc", "")
+    lat        = request.form.get("lat", "")
+    lng        = request.form.get("lng", "")
+    city_form  = request.form.get("city", "").strip()
+    state_form = request.form.get("state", "").strip()
 
     if not file or file.filename == "":
         return jsonify({"error": "No file provided"}), 400
@@ -323,6 +437,9 @@ def detect_video():
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
             input_tmp_path = tmp.name
             tmp.write(file.read())
+
+        lat, lng, city, state = resolve_geo_fields(lat, lng, input_tmp_path, "video")
+        city, state = merge_manual_city_state(city, state, city_form, state_form)
 
         # ─── OPEN INPUT VIDEO ───
         cap = cv2.VideoCapture(input_tmp_path)
@@ -430,7 +547,9 @@ def detect_video():
             "detections": all_dets[:20],
             "score":      avg_score,
             "severity":   severity_label(avg_score),
-            "lat": lat, "lng": lng, "loc": loc,
+            "lat": lat, "lng": lng,
+            "city":  city,
+            "state": state,
         }
         save_history(entry)
         
@@ -440,6 +559,10 @@ def detect_video():
             "score":      avg_score,
             "severity":   severity_label(avg_score),
             "entry_id":   entry["id"],
+            "lat":        lat,
+            "lng":        lng,
+            "city":       city,
+            "state":      state,
         })
         
     except Exception as e:

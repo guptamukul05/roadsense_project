@@ -330,6 +330,11 @@ let notifSent = {};
 const sevColor = s => s>=9?'#ff4444':s>=7?'#ff6b35':s>=4?'#ffcc00':'#7fff6b';
 const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
 const sevChip  = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
+function placeLabel(rec) {
+  const p = [rec.city, rec.state].filter(x => x && String(x).trim());
+  if (p.length) return p.join(', ');
+  return rec.loc || '';
+}
 const typeClass = t => {
   if(!t) return 'tp-other';
   t=t.toLowerCase();
@@ -372,7 +377,7 @@ function renderTable(){
     tb.insertAdjacentHTML('beforeend', `<tr>
       <td><span style="font-family:'Space Mono';font-size:.68rem;color:var(--muted)">#${(i+1).toString().padStart(2,'0')}</span></td>
       <td><span class="tp ${typeClass(cls)}">${cls}</span></td>
-      <td style="font-size:.76rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec.loc||rec.timestamp||'—'}</td>
+      <td style="font-size:.76rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${placeLabel(rec)||rec.timestamp||'—'}</td>
       <td style="font-family:'Space Mono';font-size:.65rem;color:var(--muted)">${rec.lat&&rec.lng?`${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E`:'No GPS'}</td>
       <td><div class="sc-mini"><div class="bar-m"><div class="fill-m fill-c" style="width:${conf*100}%"></div></div><span style="color:var(--accent)">${conf?(conf*100).toFixed(0)+'%':'—'}</span></div></td>
       <td><div class="sc-mini"><div class="bar-m"><div class="fill-m fill-s" style="width:${(rec.score||1)*10}%"></div></div><span style="color:${sevColor(rec.score||1)};font-weight:700">${rec.score||1}/10</span></div></td>
@@ -406,7 +411,7 @@ function renderMap(){
     const marker = L.marker([lat,lng],{icon}).addTo(map);
     marker.bindPopup(`<div style="font-family:'Space Mono',monospace;min-width:180px">
       <div style="font-weight:700;font-size:.8rem;margin-bottom:5px">${mainDet?mainDet.class:'Anomaly'}</div>
-      <div style="font-size:.7rem;color:#555;margin-bottom:3px">📍 ${rec.loc||'Unknown location'}</div>
+      <div style="font-size:.7rem;color:#555;margin-bottom:3px">📍 ${placeLabel(rec)||'Unknown location'}</div>
       <div style="font-size:.68rem;color:#777;margin-bottom:7px">${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E</div>
       <span style="padding:2px 8px;border-radius:4px;background:${color}22;border:1px solid ${color};color:${color};font-size:.63rem;font-weight:700">${sevLabel(s)} ${s}/10</span>
     </div>`);
@@ -449,7 +454,7 @@ function renderNotifications(){
     const summaries={'crit':'Severe road damage detected. Immediate repair required within 24 hours to prevent accidents.','high':'Significant road damage. Repair recommended within 72 hours.','med':'Moderate damage detected. Please schedule a repair visit.'};
     grid.insertAdjacentHTML('beforeend',`<div class="notif-card ${cat}">
       <div class="notif-priority" style="background:${bg};border:1px solid ${border};color:${color}">${priLabel}</div>
-      <div class="notif-loc">${rec.loc||'Unknown Location'}</div>
+      <div class="notif-loc">${placeLabel(rec)||'Unknown Location'}</div>
       <div class="notif-summary">${summaries[cat]}</div>
       <div class="notif-meta">
         <span class="notif-badge">${cls}</span>
@@ -475,7 +480,7 @@ function renderRepair(){
     const mainDet=rec.detections&&rec.detections[0];
     list.insertAdjacentHTML('beforeend',`<div style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
       <span style="font-family:'Space Mono';font-size:.66rem;color:var(--muted);flex-shrink:0">${rec.timestamp?rec.timestamp.slice(5,16):'—'}</span>
-      <span style="flex:1;font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec.loc||mainDet&&mainDet.class||'Unknown'}</span>
+      <span style="flex:1;font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${placeLabel(rec)||mainDet&&mainDet.class||'Unknown'}</span>
       <span class="sev-chip ${sevChip(s)}" style="font-size:.58rem">${s}/10</span>
       <span class="st-chip st-pending">⏳ Pending</span>
     </div>`);
