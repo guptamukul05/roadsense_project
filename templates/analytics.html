@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
-<title>RoadSense AI — Analytics</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<title>RoadSense AI — Municipality Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -12,166 +12,198 @@
   --bg:#050a12;--surface:#0b1523;--surface2:#0f1e30;
   --border:rgba(0,210,255,0.12);--accent:#00d2ff;--accent2:#ff6b35;
   --accent3:#7fff6b;--warn:#ffcc00;--danger:#ff4444;
-  --text:#e8f4fd;--muted:#5a7a9a;--card:rgba(11,21,35,0.9);
+  --text:#e8f4fd;--muted:#5a7a9a;--card:rgba(11,21,35,0.92);
+  --fs-base:15px;--fs-sm:13px;--fs-xs:11.5px;--fs-lg:17px;
 }
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+html{font-size:var(--fs-base)}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
+  font-size:var(--fs-base);min-height:100vh;overflow-x:hidden;line-height:1.55}
 .bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;
-  background:radial-gradient(ellipse 80% 50% at 15% 5%,rgba(0,210,255,0.07) 0%,transparent 60%),
-    radial-gradient(ellipse 60% 40% at 85% 85%,rgba(255,107,53,0.06) 0%,transparent 55%)}
+  background:radial-gradient(ellipse 80% 50% at 15% 5%,rgba(0,210,255,.07) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 85%,rgba(255,107,53,.06) 0%,transparent 55%)}
 .grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;
-  background-image:linear-gradient(rgba(0,210,255,0.025) 1px,transparent 1px),
-    linear-gradient(90deg,rgba(0,210,255,0.025) 1px,transparent 1px);
+  background-image:linear-gradient(rgba(0,210,255,.025) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,210,255,.025) 1px,transparent 1px);
   background-size:50px 50px;animation:gridMove 25s linear infinite}
 @keyframes gridMove{0%{background-position:0 0}100%{background-position:50px 50px}}
 .wrapper{position:relative;z-index:1}
 
-.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 36px;
-  border-bottom:1px solid var(--border);background:rgba(5,10,18,.85);backdrop-filter:blur(20px);
+/* ── TOPBAR ── */
+.topbar{display:flex;align-items:center;justify-content:space-between;
+  padding:14px 36px;border-bottom:1px solid var(--border);
+  background:rgba(5,10,18,.88);backdrop-filter:blur(22px);
   position:sticky;top:0;z-index:100}
-.logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
-.logo-icon{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);
-  display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 0 18px rgba(0,210,255,.4)}
+.logo{display:flex;align-items:center;gap:10px;
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.5px}
+.logo-icon{width:34px;height:34px;border-radius:9px;
+  background:linear-gradient(135deg,var(--accent),#0080ff);
+  display:flex;align-items:center;justify-content:center;font-size:.95rem;
+  box-shadow:0 0 16px rgba(0,210,255,.4)}
 .logo span{color:var(--accent)}
-.nav-btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);font-size:.83rem;font-weight:500;
-  color:var(--muted);background:transparent;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
+.nav-btn{padding:7px 16px;border-radius:8px;border:1px solid var(--border);
+  font-size:var(--fs-sm);font-weight:500;color:var(--muted);background:transparent;
+  cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
 .nav-btn:hover,.nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(0,210,255,.06)}
-.live-badge{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:50px;
-  background:rgba(127,255,107,.08);border:1px solid rgba(127,255,107,.25);
-  font-size:.72rem;font-family:'Space Mono',monospace;color:var(--accent3)}
-.live-dot{width:7px;height:7px;border-radius:50%;background:var(--accent3);box-shadow:0 0 8px var(--accent3);animation:pulse 2s ease-in-out infinite}
-@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
 
-.page-header{padding:28px 36px 8px}
-.page-title{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;letter-spacing:-1px;margin-bottom:5px}
+/* ── PAGE HEADER ── */
+.page-header{padding:26px 36px 6px}
+.page-title{font-family:'Syne',sans-serif;font-size:clamp(1.6rem,2.5vw,2rem);
+  font-weight:800;letter-spacing:-.8px;margin-bottom:4px}
 .page-title span{color:var(--accent)}
-.page-sub{font-size:.88rem;color:var(--muted)}
+.page-sub{font-size:var(--fs-sm);color:var(--muted)}
 
-.section{padding:16px 36px}
-.section-title{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:700;text-transform:uppercase;
-  letter-spacing:1px;color:var(--muted);margin-bottom:14px;display:flex;align-items:center;gap:8px}
-.section-title::after{content:'';flex:1;height:1px;background:var(--border)}
+/* ── SECTION ── */
+.section{padding:14px 36px}
+.sec-title{font-family:'Syne',sans-serif;font-size:.78rem;font-weight:700;
+  text-transform:uppercase;letter-spacing:1px;color:var(--muted);
+  margin-bottom:13px;display:flex;align-items:center;gap:8px}
+.sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
 
-.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px;backdrop-filter:blur(20px);transition:border-color .3s}
-.card:hover{border-color:rgba(0,210,255,.22)}
-.card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px}
-.card-tg{display:flex;align-items:center;gap:10px}
-.card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;justify-content:center;
-  font-size:.85rem;background:rgba(0,210,255,.1);color:var(--accent);border:1px solid rgba(0,210,255,.2)}
-.card-title{font-family:'Syne',sans-serif;font-size:.9rem;font-weight:700}
-.card-sub{font-size:.72rem;color:var(--muted);margin-top:2px}
+/* ── CARD ── */
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;
+  padding:20px;backdrop-filter:blur(20px);transition:border-color .3s}
+.card:hover{border-color:rgba(0,210,255,.2)}
+.card-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:15px}
+.card-tg{display:flex;align-items:center;gap:9px}
+.card-icon{width:31px;height:31px;border-radius:8px;display:flex;align-items:center;
+  justify-content:center;font-size:.82rem;background:rgba(0,210,255,.1);
+  color:var(--accent);border:1px solid rgba(0,210,255,.2);flex-shrink:0}
+.card-title{font-family:'Syne',sans-serif;font-size:var(--fs-base);font-weight:700}
+.card-sub{font-size:var(--fs-xs);color:var(--muted);margin-top:1px}
 
-/* MAIN GRID */
-.main-grid{display:grid;grid-template-columns:1.4fr 1fr;gap:18px;padding:0 36px}
-.right-col{display:flex;flex-direction:column;gap:18px}
+/* ── SEARCH BAR ── */
+.search-bar{display:flex;gap:9px;padding:0 36px;margin-bottom:0}
+.search-input{flex:1;background:rgba(0,210,255,.04);border:1px solid var(--border);
+  border-radius:10px;padding:10px 16px;color:var(--text);font-family:'DM Sans';
+  font-size:var(--fs-base);outline:none;transition:all .2s}
+.search-input:focus{border-color:var(--accent);background:rgba(0,210,255,.07);
+  box-shadow:0 0 14px rgba(0,210,255,.1)}
+.search-input::placeholder{color:var(--muted)}
+.search-btn{padding:10px 20px;border-radius:10px;border:none;
+  background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;
+  font-family:'Syne';font-weight:700;font-size:var(--fs-sm);cursor:pointer;
+  transition:all .2s;white-space:nowrap}
+.search-btn:hover{transform:translateY(-1px);box-shadow:0 5px 18px rgba(0,210,255,.35)}
+.search-clear{padding:10px 16px;border-radius:10px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);font-family:'DM Sans';font-size:var(--fs-sm);
+  cursor:pointer;transition:all .2s}
+.search-clear:hover{border-color:var(--accent);color:var(--accent)}
 
-/* MAP */
-.map-container{position:relative;border-radius:13px;overflow:hidden;height:370px;background:var(--surface2);border:1px solid var(--border)}
+/* ── STATS ROW ── */
+.stats-row{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;padding:0 36px 0}
+.stat-box{background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:16px 18px;transition:all .3s}
+.stat-box:hover{border-color:rgba(0,210,255,.25)}
+.stat-val{font-family:'Space Mono',monospace;font-size:1.6rem;font-weight:700;line-height:1}
+.stat-lbl{font-size:var(--fs-xs);color:var(--muted);margin-top:4px;text-transform:uppercase;letter-spacing:.5px}
+
+/* ── MAIN GRID (map + severity) ── */
+.main-grid{display:grid;grid-template-columns:1.45fr .95fr;gap:18px;padding:0 36px}
+
+/* ── MAP ── */
+.map-container{position:relative;border-radius:13px;overflow:hidden;
+  height:390px;background:var(--surface2);border:1px solid var(--border)}
 #leaflet-map2{width:100%;height:100%}
 .leaflet-tile-pane{filter:brightness(.82) saturate(.65) hue-rotate(175deg)}
-.map-info-badge{position:absolute;top:10px;left:10px;background:rgba(5,10,18,.92);border:1px solid var(--border);
-  border-radius:9px;padding:7px 13px;font-size:.7rem;font-family:'Space Mono';backdrop-filter:blur(10px);z-index:1000;max-width:260px}
-.map-legend-box{position:absolute;bottom:10px;right:10px;background:rgba(5,10,18,.92);border:1px solid var(--border);
-  border-radius:9px;padding:9px 13px;backdrop-filter:blur(10px);z-index:1000}
-.leg-row{display:flex;align-items:center;gap:7px;font-size:.65rem;margin-bottom:4px}
-.leg-row:last-child{margin-bottom:0}
-.leg-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0}
+.map-info-badge{position:absolute;top:10px;left:10px;background:rgba(5,10,18,.93);
+  border:1px solid var(--border);border-radius:9px;padding:7px 12px;
+  font-size:var(--fs-xs);font-family:'Space Mono';backdrop-filter:blur(10px);
+  z-index:1000;max-width:270px;line-height:1.5}
+.map-search-badge{position:absolute;top:10px;right:10px;background:rgba(5,10,18,.93);
+  border:1px solid var(--border);border-radius:9px;padding:5px 12px;
+  font-size:var(--fs-xs);font-family:'Space Mono';backdrop-filter:blur(10px);
+  z-index:1000;color:var(--warn)}
 
-/* TABLE */
+/* ── SEVERITY LEGEND (interactive) ── */
+.sev-legend-panel{display:flex;flex-direction:column;gap:9px}
+.sev-legend-card{border-radius:12px;padding:14px;border:2px solid transparent;
+  cursor:pointer;transition:all .25s;position:relative;overflow:hidden}
+.sev-legend-card::before{content:'';position:absolute;left:0;top:0;bottom:0;
+  width:4px;border-radius:2px 0 0 2px}
+.sev-legend-card.active-filter{transform:translateY(-2px)}
+.sev-legend-card:hover{transform:translateY(-2px)}
+.sev-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+.sev-num-big{font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;line-height:1}
+.sev-name-txt{font-size:var(--fs-sm);font-weight:700}
+.sev-count-badge{font-family:'Space Mono';font-size:var(--fs-xs);font-weight:700;
+  padding:2px 8px;border-radius:5px;background:rgba(0,0,0,.25)}
+.sev-desc-sm{font-size:var(--fs-xs);color:var(--muted);margin-top:2px;line-height:1.45}
+.sev-filter-hint{font-size:10px;color:var(--muted);margin-top:5px;font-family:'Space Mono';
+  opacity:.7;font-style:italic}
+.filter-active-tag{display:inline-flex;align-items:center;gap:5px;padding:4px 12px;
+  border-radius:6px;background:rgba(0,210,255,.1);border:1px solid rgba(0,210,255,.3);
+  color:var(--accent);font-size:var(--fs-xs);font-family:'Space Mono';cursor:pointer}
+.filter-active-tag:hover{background:rgba(0,210,255,.18)}
+
+/* ── TABLE ── */
 .tbl-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse}
-th{font-size:.65rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Space Mono';
-  padding:8px 10px;border-bottom:1px solid var(--border);text-align:left;font-weight:400}
-td{padding:10px 10px;border-bottom:1px solid rgba(0,210,255,.05);font-size:.8rem;vertical-align:middle}
+th{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.7px;color:var(--muted);
+  font-family:'Space Mono';padding:8px 10px;border-bottom:1px solid var(--border);
+  text-align:left;font-weight:400;white-space:nowrap}
+td{padding:10px 10px;border-bottom:1px solid rgba(0,210,255,.05);
+  font-size:var(--fs-sm);vertical-align:middle}
 tr:last-child td{border-bottom:none}
 tr:hover td{background:rgba(0,210,255,.02)}
-.tp{padding:3px 9px;border-radius:5px;font-size:.65rem;font-family:'Space Mono';font-weight:700;text-transform:uppercase;display:inline-block}
-.tp-crack{background:rgba(255,68,68,.12);color:var(--danger);border:1px solid rgba(255,68,68,.3)}
-.tp-pothole{background:rgba(255,107,53,.12);color:var(--accent2);border:1px solid rgba(255,107,53,.3)}
-.tp-patch{background:rgba(255,204,0,.12);color:var(--warn);border:1px solid rgba(255,204,0,.3)}
-.tp-other{background:rgba(90,122,154,.1);color:#aaa;border:1px solid rgba(90,122,154,.3)}
-.sc-mini{display:flex;align-items:center;gap:5px;font-family:'Space Mono';font-size:.72rem}
-.bar-m{width:48px;height:4px;background:var(--border);border-radius:3px;overflow:hidden}
-.fill-m{height:100%;border-radius:3px}
-.fill-c{background:linear-gradient(90deg,var(--accent),#0080ff)}
-.fill-s{background:linear-gradient(90deg,var(--warn),var(--danger))}
-.sev-chip{padding:2px 8px;border-radius:5px;font-size:.62rem;font-family:'Space Mono';font-weight:700}
+
+/* TYPE PILLS */
+.type-pills{display:flex;flex-wrap:wrap;gap:4px}
+.tp{padding:2px 8px;border-radius:5px;font-size:10px;font-family:'Space Mono';
+  font-weight:700;text-transform:uppercase;white-space:nowrap}
+.tp-pothole{background:rgba(255,107,53,.15);color:var(--accent2);border:1px solid rgba(255,107,53,.35)}
+.tp-crack-severe{background:rgba(255,68,68,.15);color:var(--danger);border:1px solid rgba(255,68,68,.35)}
+.tp-crack{background:rgba(255,204,0,.15);color:var(--warn);border:1px solid rgba(255,204,0,.35)}
+.tp-other{background:rgba(90,122,154,.1);color:#8faabf;border:1px solid rgba(90,122,154,.3)}
+
+/* SEV CHIP */
+.sev-chip{padding:2px 8px;border-radius:5px;font-size:var(--fs-xs);
+  font-family:'Space Mono';font-weight:700;white-space:nowrap}
 .sc-low{background:rgba(127,255,107,.1);color:var(--accent3);border:1px solid rgba(127,255,107,.3)}
 .sc-med{background:rgba(255,204,0,.1);color:var(--warn);border:1px solid rgba(255,204,0,.3)}
 .sc-high{background:rgba(255,107,53,.1);color:var(--accent2);border:1px solid rgba(255,107,53,.3)}
 .sc-crit{background:rgba(255,68,68,.1);color:var(--danger);border:1px solid rgba(255,68,68,.3)}
-.st-chip{padding:2px 9px;border-radius:5px;font-size:.65rem;font-family:'Space Mono'}
+
+/* SCORE MINI */
+.sc-mini{display:flex;align-items:center;gap:5px;font-family:'Space Mono';font-size:var(--fs-sm)}
+.bar-m{width:46px;height:4px;background:var(--border);border-radius:3px;overflow:hidden}
+.fill-m{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),#0080ff)}
+.fill-s{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--warn),var(--danger))}
+
+/* STATUS chip */
+.st-chip{padding:2px 9px;border-radius:5px;font-size:var(--fs-xs);font-family:'Space Mono'}
 .st-pending{background:rgba(255,204,0,.1);color:var(--warn);border:1px solid rgba(255,204,0,.3)}
-.st-sent{background:rgba(127,255,107,.1);color:var(--accent3);border:1px solid rgba(127,255,107,.3)}
-.ntf-btn{padding:4px 10px;border-radius:7px;border:1px solid rgba(0,210,255,.3);background:rgba(0,210,255,.07);
-  color:var(--accent);font-size:.68rem;font-family:'Space Mono';cursor:pointer;transition:all .3s;white-space:nowrap}
-.ntf-btn:hover{background:rgba(0,210,255,.14);border-color:var(--accent)}
-.ntf-btn.sent{background:rgba(127,255,107,.1);border-color:var(--accent3);color:var(--accent3)}
+.st-repaired{background:rgba(127,255,107,.1);color:var(--accent3);border:1px solid rgba(127,255,107,.3)}
+.st-approved{background:rgba(0,210,255,.1);color:var(--accent);border:1px solid rgba(0,210,255,.3)}
 
-/* SEVERITY SCALE */
-.sev-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.sev-card{border-radius:11px;padding:13px;border:1px solid var(--border);transition:all .3s}
-.sev-card:hover{transform:translateY(-2px)}
-.sev-num{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800;line-height:1}
-.sev-name{font-size:.82rem;font-weight:600;margin-top:2px}
-.sev-range{font-size:.66rem;color:var(--muted);margin-top:2px;font-family:'Space Mono'}
-.sev-desc{font-size:.68rem;color:var(--muted);margin-top:4px;line-height:1.4}
+/* BOTTOM STATS */
+.bottom-stats{display:grid;grid-template-columns:repeat(3,1fr);gap:13px;padding:0 36px 36px}
+.bstat{background:var(--card);border:1px solid var(--border);border-radius:13px;
+  padding:15px 17px;transition:all .3s}
+.bstat:hover{border-color:rgba(0,210,255,.25)}
+.bstat-emoji{font-size:1.3rem;margin-bottom:6px}
+.bstat-val{font-family:'Space Mono';font-size:1.35rem;font-weight:700}
+.bstat-lbl{font-size:var(--fs-xs);color:var(--muted);margin-top:3px;
+  text-transform:uppercase;letter-spacing:.4px}
 
-/* STATUS ROW */
-.status-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;padding:0 36px 18px}
-.st-box{background:var(--card);border:1px solid var(--border);border-radius:13px;padding:16px;
-  display:flex;align-items:center;gap:12px;transition:all .3s}
-.st-box:hover{border-color:rgba(0,210,255,.25)}
-.st-emoji{font-size:1.4rem}
-.st-count{font-family:'Space Mono',monospace;font-size:1.4rem;font-weight:700}
-.st-label{font-size:.7rem;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.4px}
+/* SEARCH RESULTS NOTE */
+.search-note{display:none;padding:8px 16px;background:rgba(0,210,255,.07);
+  border:1px solid rgba(0,210,255,.2);border-radius:8px;font-size:var(--fs-sm);
+  color:var(--accent);font-family:'Space Mono';margin-bottom:12px;
+  display:flex;align-items:center;justify-content:space-between}
 
-/* MUNICIPALITY */
-.notif-section{padding:0 36px 18px}
-.notif-outer{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:22px}
-.notif-hd{display:flex;align-items:center;justify-content:space-between;margin-bottom:18px}
-.notif-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
-.notif-card{border:1px solid var(--border);border-radius:13px;padding:16px;background:var(--surface2);
-  transition:all .3s;position:relative;overflow:hidden}
-.notif-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px}
-.notif-card.crit::before{background:linear-gradient(90deg,var(--danger),#ff6b35)}
-.notif-card.high::before{background:linear-gradient(90deg,var(--accent2),var(--warn))}
-.notif-card.med::before{background:linear-gradient(90deg,var(--warn),var(--accent))}
-.notif-priority{display:inline-flex;align-items:center;font-size:.62rem;font-family:'Space Mono';
-  margin-bottom:9px;padding:2px 9px;border-radius:4px}
-.notif-loc{font-family:'Syne',sans-serif;font-size:.86rem;font-weight:700;margin-bottom:5px}
-.notif-summary{font-size:.74rem;color:var(--muted);margin-bottom:11px;line-height:1.5}
-.notif-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-.notif-badge{font-size:.63rem;font-family:'Space Mono';padding:2px 7px;border-radius:4px;
-  background:rgba(0,210,255,.08);border:1px solid rgba(0,210,255,.2);color:var(--accent)}
-.notif-footer{display:flex;align-items:center;justify-content:space-between}
-.notif-time{font-size:.65rem;color:var(--muted);font-family:'Space Mono'}
-.send-btn{padding:6px 12px;border-radius:7px;border:1px solid rgba(0,210,255,.35);
-  background:rgba(0,210,255,.08);color:var(--accent);font-size:.7rem;font-family:'Space Mono';
-  cursor:pointer;transition:all .35s}
-.send-btn:hover{background:rgba(0,210,255,.15);border-color:var(--accent)}
-.send-btn.sent{background:rgba(127,255,107,.12);border-color:var(--accent3);color:var(--accent3)}
-
-/* BOTTOM */
-.bottom-grid{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;padding:0 36px 40px}
-.act-feed{display:flex;flex-direction:column;gap:6px;max-height:210px;overflow-y:auto}
-.act-feed::-webkit-scrollbar{width:3px}
-.act-feed::-webkit-scrollbar-thumb{background:var(--border)}
-.act-item{display:flex;gap:9px;padding:9px 11px;border-radius:9px;background:var(--surface2);font-size:.75rem}
-.act-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px}
-.act-time{font-family:'Space Mono';font-size:.64rem;color:var(--muted)}
-
-/* AREA */
-.area-grid{display:grid;grid-template-columns:1fr 1fr;gap:9px}
-.area-box{border-radius:9px;padding:11px;text-align:center}
-.area-val{font-family:'Space Mono',monospace;font-size:1rem;font-weight:700}
-.area-lbl{font-size:.63rem;color:var(--muted);margin-top:3px}
-
+/* ANIMATIONS */
 .fade-up{opacity:0;transform:translateY(18px);animation:fadeUp .5s ease forwards}
 @keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
-.d1{animation-delay:.04s}.d2{animation-delay:.1s}.d3{animation-delay:.17s}.d4{animation-delay:.24s}
-::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-@media(max-width:1100px){.main-grid,.bottom-grid{grid-template-columns:1fr}.notif-grid{grid-template-columns:1fr}.status-row{grid-template-columns:1fr 1fr}}
+.d1{animation-delay:.04s}.d2{animation-delay:.1s}.d3{animation-delay:.16s}
+::-webkit-scrollbar{width:4px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@media(max-width:1100px){
+  .main-grid{grid-template-columns:1fr}
+  .stats-row{grid-template-columns:1fr 1fr}
+  .bottom-stats{grid-template-columns:1fr 1fr}
+}
 </style>
 </head>
 <body>
@@ -179,341 +211,496 @@ tr:hover td{background:rgba(0,210,255,.02)}
 <div class="grid-overlay"></div>
 <div class="wrapper">
 
+  <!-- TOPBAR -->
   <nav class="topbar">
     <div class="logo"><div class="logo-icon">🛣</div>Road<span>Sense</span> AI</div>
-    <div style="display:flex;align-items:center;gap:8px">
-      <div class="live-badge"><div class="live-dot"></div>LIVE MONITORING</div>
+    <div style="display:flex;align-items:center;gap:7px">
       <a href="/" class="nav-btn">📤 Upload</a>
-      <a href="/analytics" class="nav-btn active">📊 Analytics</a>
+      <a href="/analytics" class="nav-btn active">📊 Municipality</a>
       <a href="/history_page" class="nav-btn">🕐 History</a>
     </div>
   </nav>
 
+  <!-- PAGE HEADER -->
   <div class="page-header fade-up">
-    <div class="page-title">Anomaly <span>Analytics</span></div>
-    <div class="page-sub" id="pageSubtitle">Loading detection records…</div>
+    <div class="page-title">Municipality <span>Dashboard</span></div>
+    <div class="page-sub" id="pageSubtitle">Loading road anomaly records…</div>
   </div>
 
-  <!-- MAP + SEVERITY -->
+  <!-- AREA SEARCH -->
   <div class="section">
-    <div class="section-title">📍 GPS Anomaly Map & Severity Scale</div>
+    <div class="sec-title">🔍 Search by Area</div>
+    <div class="search-bar">
+      <input class="search-input" id="areaSearch" type="text"
+        placeholder="Search area or location — e.g. Noida, Sector 14, MG Road…"
+        onkeydown="if(event.key==='Enter')searchArea()"/>
+      <button class="search-btn" onclick="searchArea()">Search</button>
+      <button class="search-clear" onclick="clearSearch()">✕ Clear</button>
+    </div>
+    <div style="padding:0 36px;margin-top:10px" id="searchNoteWrap" style="display:none">
+      <div id="searchNote" class="search-note"></div>
+    </div>
+  </div>
+
+  <!-- STATS ROW -->
+  <div class="section" style="padding-bottom:0">
+    <div class="sec-title">📊 Overview</div>
+  </div>
+  <div class="stats-row fade-up d1">
+    <div class="stat-box">
+      <div class="stat-val" id="cTotal" style="color:var(--danger)">—</div>
+      <div class="stat-lbl">Total Anomalies</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" id="cCrit" style="color:var(--danger)">—</div>
+      <div class="stat-lbl">Critical (9–10)</div>
+    </div>
+    <div class="stat-box">
+      <div class="stat-val" id="cPending" style="color:var(--warn)">—</div>
+      <div class="stat-lbl">Pending Repair</div>
+    </div>
+  </div>
+
+  <!-- MAP + SEVERITY FILTER -->
+  <div class="section" style="margin-top:18px">
+    <div class="sec-title">📍 GPS Anomaly Map &amp; Severity Filter</div>
     <div class="main-grid">
+
+      <!-- MAP -->
       <div class="card fade-up d1">
         <div class="card-hd">
           <div class="card-tg">
             <div class="card-icon">🗺</div>
-            <div><div class="card-title">Live Anomaly Map</div><div class="card-sub">GPS-tagged · click a pin for details</div></div>
+            <div>
+              <div class="card-title">Live Anomaly Map</div>
+              <div class="card-sub">GPS-tagged · click a pin for details</div>
+            </div>
           </div>
-          <span id="pinCount" style="font-family:'Space Mono';font-size:.68rem;color:var(--muted)">—</span>
+          <span id="pinCountLabel" style="font-family:'Space Mono';font-size:var(--fs-xs);color:var(--muted)">— pins</span>
         </div>
         <div class="map-container">
           <div id="leaflet-map2" style="width:100%;height:100%"></div>
           <div class="map-info-badge" id="mapInfo">📍 Click a pin to see anomaly details</div>
-          <div class="map-legend-box">
-            <div class="leg-row"><div class="leg-dot" style="background:#ff4444;box-shadow:0 0 5px #ff4444"></div><span style="font-size:.62rem;font-family:'Space Mono';color:var(--text)">Critical 9–10</span></div>
-            <div class="leg-row"><div class="leg-dot" style="background:#ff6b35"></div><span style="font-size:.62rem;font-family:'Space Mono';color:var(--text)">High 7–8</span></div>
-            <div class="leg-row"><div class="leg-dot" style="background:#ffcc00"></div><span style="font-size:.62rem;font-family:'Space Mono';color:var(--text)">Medium 4–6</span></div>
-            <div class="leg-row"><div class="leg-dot" style="background:#7fff6b"></div><span style="font-size:.62rem;font-family:'Space Mono';color:var(--text)">Low 1–3</span></div>
-          </div>
+          <div class="map-search-badge" id="mapSearchBadge" style="display:none">🔍 Filtered view</div>
         </div>
       </div>
 
-      <div class="right-col">
-        <div class="card fade-up d1">
-          <div class="card-hd"><div class="card-tg"><div class="card-icon">🎯</div><div><div class="card-title">Severity Scale</div><div class="card-sub">AI scoring 1–10</div></div></div></div>
-          <div class="sev-grid">
-            <div class="sev-card" style="background:rgba(127,255,107,.04);border-color:rgba(127,255,107,.2)">
-              <div class="sev-num" style="color:var(--accent3)">1–3</div><div class="sev-name" style="color:var(--accent3)">Low</div>
-              <div class="sev-range">Score 1–3</div><div class="sev-desc">Minor wear. Monitor only.</div>
-            </div>
-            <div class="sev-card" style="background:rgba(255,204,0,.04);border-color:rgba(255,204,0,.2)">
-              <div class="sev-num" style="color:var(--warn)">4–6</div><div class="sev-name" style="color:var(--warn)">Medium</div>
-              <div class="sev-range">Score 4–6</div><div class="sev-desc">Schedule repair soon.</div>
-            </div>
-            <div class="sev-card" style="background:rgba(255,107,53,.04);border-color:rgba(255,107,53,.2)">
-              <div class="sev-num" style="color:var(--accent2)">7–8</div><div class="sev-name" style="color:var(--accent2)">High</div>
-              <div class="sev-range">Score 7–8</div><div class="sev-desc">Priority repair needed.</div>
-            </div>
-            <div class="sev-card" style="background:rgba(255,68,68,.04);border-color:rgba(255,68,68,.2)">
-              <div class="sev-num" style="color:var(--danger)">9–10</div><div class="sev-name" style="color:var(--danger)">Critical</div>
-              <div class="sev-range">Score 9–10</div><div class="sev-desc">Immediate action!</div>
-            </div>
-          </div>
+      <!-- SEVERITY LEGEND (interactive filter) -->
+      <div class="fade-up d2" style="display:flex;flex-direction:column;gap:0">
+        <div style="font-family:'Syne',sans-serif;font-size:.78rem;font-weight:700;
+          text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:11px;
+          display:flex;align-items:center;justify-content:space-between">
+          <span>🎯 Severity Scale — click to filter map</span>
+          <span id="filterClearBtn" onclick="clearSevFilter()"
+            style="display:none;font-size:var(--fs-xs);color:var(--accent);cursor:pointer;
+            padding:2px 8px;border:1px solid rgba(0,210,255,.3);border-radius:5px">✕ Clear filter</span>
         </div>
+        <div class="sev-legend-panel">
 
-        <div class="card fade-up d2">
-          <div class="card-hd"><div class="card-tg"><div class="card-icon">📡</div><div><div class="card-title">Activity</div><div class="card-sub">Recent system events</div></div></div></div>
-          <div class="act-feed" id="actFeed">
-            <div class="act-item"><div class="act-dot" style="background:var(--accent)"></div><div><div>Analytics loaded</div><div class="act-time">now</div></div></div>
+          <div class="sev-legend-card" id="sevCard-crit"
+            style="background:rgba(255,68,68,.05);border-color:rgba(255,68,68,.2)"
+            onclick="toggleSevFilter('crit')">
+            <div class="sev-card-top">
+              <div>
+                <div class="sev-num-big" style="color:var(--danger)">9–10</div>
+                <div class="sev-name-txt" style="color:var(--danger)">Critical</div>
+              </div>
+              <span class="sev-count-badge" id="cnt-crit" style="color:var(--danger)">0</span>
+            </div>
+            <div class="sev-desc-sm">Immediate danger. Urgent action required within 24 hours.</div>
+            <div class="sev-filter-hint">Click to show only Critical pins on map →</div>
           </div>
+
+          <div class="sev-legend-card" id="sevCard-high"
+            style="background:rgba(255,107,53,.05);border-color:rgba(255,107,53,.2)"
+            onclick="toggleSevFilter('high')">
+            <div class="sev-card-top">
+              <div>
+                <div class="sev-num-big" style="color:var(--accent2)">7–8</div>
+                <div class="sev-name-txt" style="color:var(--accent2)">High</div>
+              </div>
+              <span class="sev-count-badge" id="cnt-high" style="color:var(--accent2)">0</span>
+            </div>
+            <div class="sev-desc-sm">Significant hazard. Priority repair needed this week.</div>
+            <div class="sev-filter-hint">Click to show only High pins on map →</div>
+          </div>
+
+          <div class="sev-legend-card" id="sevCard-med"
+            style="background:rgba(255,204,0,.05);border-color:rgba(255,204,0,.2)"
+            onclick="toggleSevFilter('med')">
+            <div class="sev-card-top">
+              <div>
+                <div class="sev-num-big" style="color:var(--warn)">4–6</div>
+                <div class="sev-name-txt" style="color:var(--warn)">Medium</div>
+              </div>
+              <span class="sev-count-badge" id="cnt-med" style="color:var(--warn)">0</span>
+            </div>
+            <div class="sev-desc-sm">Noticeable damage. Schedule repair within a month.</div>
+            <div class="sev-filter-hint">Click to show only Medium pins on map →</div>
+          </div>
+
+          <div class="sev-legend-card" id="sevCard-low"
+            style="background:rgba(127,255,107,.05);border-color:rgba(127,255,107,.2)"
+            onclick="toggleSevFilter('low')">
+            <div class="sev-card-top">
+              <div>
+                <div class="sev-num-big" style="color:var(--accent3)">1–3</div>
+                <div class="sev-name-txt" style="color:var(--accent3)">Low</div>
+              </div>
+              <span class="sev-count-badge" id="cnt-low" style="color:var(--accent3)">0</span>
+            </div>
+            <div class="sev-desc-sm">Minor surface wear. Log and monitor only.</div>
+            <div class="sev-filter-hint">Click to show only Low pins on map →</div>
+          </div>
+
         </div>
       </div>
+
     </div>
   </div>
 
-  <!-- TABLE -->
+  <!-- DETECTION TABLE -->
   <div class="section">
-    <div class="section-title">📋 All Detections — Sorted by Severity</div>
+    <div class="sec-title">📋 Detection Records — Sorted by Severity (Highest First)</div>
     <div class="card fade-up d2">
       <div class="card-hd">
-        <div class="card-tg"><div class="card-icon">📋</div><div><div class="card-title">Detection Records</div><div class="card-sub">From detection history · sorted by severity</div></div></div>
-        <a href="/" style="padding:5px 13px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:.73rem;cursor:pointer;font-family:'DM Sans';text-decoration:none">+ New Detection</a>
+        <div class="card-tg">
+          <div class="card-icon">📋</div>
+          <div>
+            <div class="card-title">Anomaly Records</div>
+            <div class="card-sub" id="tableSubtitle">All records from database · sorted by severity</div>
+          </div>
+        </div>
+        <a href="/" style="padding:5px 13px;border-radius:7px;border:1px solid var(--border);
+          background:transparent;color:var(--muted);font-size:var(--fs-sm);
+          cursor:pointer;font-family:'DM Sans';text-decoration:none">+ New Detection</a>
       </div>
       <div class="tbl-wrap">
         <table>
           <thead>
-            <tr><th>ID</th><th>Type</th><th>Location</th><th>GPS</th><th>Confidence</th><th>Severity</th><th>Level</th><th>Notify</th></tr>
+            <tr>
+              <th>#</th>
+              <th>Location</th>
+              <th>GPS Coordinates</th>
+              <th>Severity Score</th>
+              <th>Level</th>
+              <th>Type(s)</th>
+              <th>Confidence</th>
+            </tr>
           </thead>
           <tbody id="tblBody">
-            <tr><td colspan="8" style="text-align:center;color:var(--muted);font-size:.8rem;padding:24px">Loading detections…</td></tr>
+            <tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-size:var(--fs-sm)">Loading records…</td></tr>
           </tbody>
         </table>
       </div>
     </div>
   </div>
 
-  <!-- STATUS -->
-  <div class="section" style="padding-bottom:0"><div class="section-title">📊 Repair Status</div></div>
-  <div class="status-row fade-up d2">
-    <div class="st-box"><div class="st-emoji">⚠️</div><div><div class="st-count" id="cTotal" style="color:var(--danger)">0</div><div class="st-label">Total Anomalies</div></div></div>
-    <div class="st-box"><div class="st-emoji">🔴</div><div><div class="st-count" id="cCrit" style="color:var(--danger)">0</div><div class="st-label">Critical</div></div></div>
-    <div class="st-box"><div class="st-emoji">📬</div><div><div class="st-count" id="cNotified" style="color:var(--accent)">0</div><div class="st-label">Notified</div></div></div>
-    <div class="st-box"><div class="st-emoji">✅</div><div><div class="st-count" id="cRepaired" style="color:var(--accent3)">0</div><div class="st-label">Repaired</div></div></div>
+  <!-- BOTTOM STATS -->
+  <div class="section" style="padding-bottom:0">
+    <div class="sec-title">🔧 Repair Status</div>
   </div>
-
-  <!-- MUNICIPALITY -->
-  <div class="notif-section fade-up d3">
-    <div class="section-title" style="padding:0 0 14px">📬 Municipality Alert System</div>
-    <div class="notif-outer">
-      <div class="notif-hd">
-        <div style="display:flex;align-items:center;gap:10px">
-          <div class="card-icon">📬</div>
-          <div><div class="card-title" style="font-family:'Syne',sans-serif;font-size:.92rem;font-weight:700">Auto-generated Notifications</div>
-          <div class="card-sub">Sorted by severity · click Send to alert municipality</div></div>
-        </div>
-        <button onclick="sendAll()" style="padding:6px 14px;border-radius:7px;border:none;background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;font-family:'Syne';font-weight:700;font-size:.78rem;cursor:pointer">Send All</button>
-      </div>
-      <div class="notif-grid" id="notifGrid"><div style="color:var(--muted);font-size:.8rem;grid-column:1/-1;text-align:center;padding:20px">Loading notifications…</div></div>
+  <div class="bottom-stats fade-up d3" style="margin-bottom:36px">
+    <div class="bstat">
+      <div class="bstat-emoji">✅</div>
+      <div class="bstat-val" id="bRepaired" style="color:var(--accent3)">0</div>
+      <div class="bstat-lbl">Repaired</div>
+    </div>
+    <div class="bstat">
+      <div class="bstat-emoji">🔵</div>
+      <div class="bstat-val" id="bApproved" style="color:var(--accent)">0</div>
+      <div class="bstat-lbl">Approved / In Progress</div>
+    </div>
+    <div class="bstat">
+      <div class="bstat-emoji">⏳</div>
+      <div class="bstat-val" id="bPending" style="color:var(--warn)">0</div>
+      <div class="bstat-lbl">Awaiting Action</div>
     </div>
   </div>
 
-  <!-- BOTTOM -->
-  <div class="bottom-grid">
-    <div class="card fade-up d1">
-      <div class="card-hd"><div class="card-tg"><div class="card-icon">🔧</div><div><div class="card-title">Repair Tracker</div><div class="card-sub">Status per anomaly</div></div></div></div>
-      <div id="repairList" style="display:flex;flex-direction:column;gap:8px"><div style="color:var(--muted);font-size:.8rem;text-align:center;padding:16px">Loading…</div></div>
-    </div>
-    <div class="card fade-up d2">
-      <div class="card-hd"><div class="card-tg"><div class="card-icon">📐</div><div><div class="card-title">Area Summary</div><div class="card-sub">Total damaged surface</div></div></div></div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:11px;padding:14px;text-align:center;margin-bottom:11px">
-        <div id="totalArea" style="font-family:'Space Mono';font-size:1.9rem;font-weight:700;color:var(--danger)">—</div>
-        <div style="font-size:.7rem;color:var(--muted);margin-top:3px;text-transform:uppercase;letter-spacing:.5px">Total Damaged Area (est.)</div>
-      </div>
-      <div class="area-grid">
-        <div class="area-box" style="background:rgba(255,107,53,.06);border:1px solid rgba(255,107,53,.2)"><div class="area-val" id="areaP" style="color:var(--accent2)">—</div><div class="area-lbl">Potholes</div></div>
-        <div class="area-box" style="background:rgba(255,68,68,.06);border:1px solid rgba(255,68,68,.2)"><div class="area-val" id="areaC" style="color:var(--danger)">—</div><div class="area-lbl">Cracks</div></div>
-      </div>
-      <div style="margin-top:10px;background:rgba(0,210,255,.04);border:1px solid rgba(0,210,255,.15);border-radius:9px;padding:11px">
-        <div style="font-size:.7rem;color:var(--muted);margin-bottom:3px">Est. Repair Cost (₹5,000/m²)</div>
-        <div id="repairCost" style="font-family:'Space Mono';font-size:1rem;font-weight:700;color:var(--accent)">—</div>
-      </div>
-    </div>
-  </div>
-
-</div>
+</div><!-- /wrapper -->
 
 <script>
-// ── Load history from backend ──────────────────────────────────
-let records = [];
-let notifSent = {};
+// ── DATA ──────────────────────────────────────────────────────
+let allRecords = [];
+let filteredRecords = [];
+let activeFilter = null;   // 'crit' | 'high' | 'med' | 'low' | null
+let searchQuery = '';
+let leafletMap = null;
+let allMarkers = [];
 
 const sevColor = s => s>=9?'#ff4444':s>=7?'#ff6b35':s>=4?'#ffcc00':'#7fff6b';
 const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
-const sevChip  = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
-const typeClass = t => {
-  if(!t) return 'tp-other';
-  t=t.toLowerCase();
-  if(t.includes('pothole')) return 'tp-pothole';
-  if(t.includes('crack'))   return 'tp-crack';
-  if(t.includes('patch'))   return 'tp-patch';
-  return 'tp-other';
-};
+const sevCat   = s => s>=9?'crit':s>=7?'high':s>=4?'med':'low';
+const sevChipCls = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
 
+// ── LOAD DATA ─────────────────────────────────────────────────
 async function loadData(){
   try{
-    const r = await fetch('/history');
-    records = await r.json();
-  } catch(e){ records = []; }
+    const r=await fetch('/history');
+    allRecords=await r.json();
+  }catch(e){allRecords=[];}
+  filteredRecords=[...allRecords];
   renderAll();
 }
 
 function renderAll(){
-  document.getElementById('pageSubtitle').textContent =
-    records.length ? `${records.length} detection records · all GPS-tagged locations` : 'No detections yet — upload an image or video';
+  const count=filteredRecords.length;
+  const total=allRecords.length;
+  document.getElementById('pageSubtitle').textContent=
+    total?`${total} anomaly record${total!==1?'s':''} · all GPS-tagged locations`
+         :'No anomalies detected yet — upload images or video to begin';
+  renderStats();
+  renderSevCounts();
   renderTable();
   renderMap();
-  renderCounts();
-  renderNotifications();
-  renderRepair();
-  renderArea();
+  renderBottomStats();
 }
 
-// TABLE
+// ── STATS ─────────────────────────────────────────────────────
+function renderStats(){
+  const src=filteredRecords;
+  document.getElementById('cTotal').textContent=src.length;
+  document.getElementById('cCrit').textContent=src.filter(r=>(r.score||1)>=9).length;
+  document.getElementById('cPending').textContent=src.length; // all pending until status set
+}
+
+function renderSevCounts(){
+  ['crit','high','med','low'].forEach(cat=>{
+    const n=allRecords.filter(r=>sevCat(r.score||1)===cat).length;
+    document.getElementById('cnt-'+cat).textContent=n;
+  });
+}
+
+// ── SEVERITY FILTER ───────────────────────────────────────────
+function toggleSevFilter(cat){
+  if(activeFilter===cat){clearSevFilter();return;}
+  activeFilter=cat;
+
+  // Visual: highlight selected card
+  ['crit','high','med','low'].forEach(c=>{
+    const card=document.getElementById('sevCard-'+c);
+    const colors={crit:'rgba(255,68,68,.35)',high:'rgba(255,107,53,.35)',med:'rgba(255,204,0,.35)',low:'rgba(127,255,107,.35)'};
+    card.style.borderColor=c===cat?colors[c]:'rgba(0,0,0,.1)';
+    card.style.opacity=c===cat?'1':'.45';
+  });
+  document.getElementById('filterClearBtn').style.display='block';
+  document.getElementById('mapSearchBadge').textContent=`Showing: ${ {crit:'Critical',high:'High',med:'Medium',low:'Low'}[cat] } only`;
+  document.getElementById('mapSearchBadge').style.display='block';
+
+  // Filter map markers
+  refreshMapMarkers();
+}
+
+function clearSevFilter(){
+  activeFilter=null;
+  ['crit','high','med','low'].forEach(c=>{
+    const card=document.getElementById('sevCard-'+c);
+    const borderColors={crit:'rgba(255,68,68,.2)',high:'rgba(255,107,53,.2)',med:'rgba(255,204,0,.2)',low:'rgba(127,255,107,.2)'};
+    card.style.borderColor=borderColors[c];card.style.opacity='1';
+  });
+  document.getElementById('filterClearBtn').style.display='none';
+  document.getElementById('mapSearchBadge').style.display='none';
+  refreshMapMarkers();
+}
+
+// ── AREA SEARCH ───────────────────────────────────────────────
+function searchArea(){
+  const q=document.getElementById('areaSearch').value.trim().toLowerCase();
+  if(!q)return;
+  searchQuery=q;
+  filteredRecords=allRecords.filter(r=>{
+    const loc=(r.loc||'').toLowerCase();
+    const lat=(r.lat||'').toString().toLowerCase();
+    const lng=(r.lng||'').toString().toLowerCase();
+    return loc.includes(q)||lat.includes(q)||lng.includes(q);
+  });
+
+  const wrap=document.getElementById('searchNoteWrap');
+  const note=document.getElementById('searchNote');
+  wrap.style.display='block';
+  note.style.display='flex';
+  note.innerHTML=`🔍 Showing <b style="margin:0 4px">${filteredRecords.length}</b> result${filteredRecords.length!==1?'s':''} for "<b style="margin:0 4px">${document.getElementById('areaSearch').value.trim()}</b>"
+    &nbsp;<span onclick="clearSearch()" style="cursor:pointer;color:var(--muted)">✕ Clear</span>`;
+
+  document.getElementById('tableSubtitle').textContent=`${filteredRecords.length} result${filteredRecords.length!==1?'s':''} for "${document.getElementById('areaSearch').value.trim()}"`;
+  renderStats();
+  renderTable();
+  refreshMapMarkers();
+}
+
+function clearSearch(){
+  searchQuery='';
+  filteredRecords=[...allRecords];
+  document.getElementById('areaSearch').value='';
+  document.getElementById('searchNoteWrap').style.display='none';
+  document.getElementById('searchNote').style.display='none';
+  document.getElementById('tableSubtitle').textContent='All records · sorted by severity';
+  renderStats();renderTable();refreshMapMarkers();
+}
+
+// ── TABLE ─────────────────────────────────────────────────────
 function renderTable(){
-  const tb = document.getElementById('tblBody');
-  if(!records.length){ tb.innerHTML='<tr><td colspan="8" style="text-align:center;color:var(--muted);padding:24px;font-size:.8rem">No detections yet. <a href="/" style="color:var(--accent)">Upload a file →</a></td></tr>'; return; }
-  const sorted = [...records].sort((a,b) => (b.score||1)-(a.score||1));
-  tb.innerHTML = '';
-  sorted.forEach((rec, i) => {
-    const mainDet = rec.detections && rec.detections[0];
-    const cls = mainDet ? mainDet.class : 'Unknown';
-    const conf = mainDet ? mainDet.confidence : 0;
-    const sent = notifSent[rec.id];
-    tb.insertAdjacentHTML('beforeend', `<tr>
-      <td><span style="font-family:'Space Mono';font-size:.68rem;color:var(--muted)">#${(i+1).toString().padStart(2,'0')}</span></td>
-      <td><span class="tp ${typeClass(cls)}">${cls}</span></td>
-      <td style="font-size:.76rem;max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec.loc||rec.timestamp||'—'}</td>
-      <td style="font-family:'Space Mono';font-size:.65rem;color:var(--muted)">${rec.lat&&rec.lng?`${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E`:'No GPS'}</td>
-      <td><div class="sc-mini"><div class="bar-m"><div class="fill-m fill-c" style="width:${conf*100}%"></div></div><span style="color:var(--accent)">${conf?(conf*100).toFixed(0)+'%':'—'}</span></div></td>
-      <td><div class="sc-mini"><div class="bar-m"><div class="fill-m fill-s" style="width:${(rec.score||1)*10}%"></div></div><span style="color:${sevColor(rec.score||1)};font-weight:700">${rec.score||1}/10</span></div></td>
-      <td><span class="sev-chip ${sevChip(rec.score||1)}">${sevLabel(rec.score||1)}</span></td>
-      <td><button class="ntf-btn${sent?' sent':''}" id="ntf-${rec.id}" onclick="sendNotif('${rec.id}',this)">${sent?'✅ Sent':'📤 Send'}</button></td>
+  const tb=document.getElementById('tblBody');
+  const src=[...filteredRecords].sort((a,b)=>(b.score||1)-(a.score||1));
+
+  if(!src.length){
+    tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-size:var(--fs-sm)">
+      ${searchQuery?`No records found for "${searchQuery}"`:'No detections yet. <a href="/" style="color:var(--accent)">Upload →</a>'}
+    </td></tr>`;
+    return;
+  }
+
+  tb.innerHTML='';
+  src.forEach((rec,i)=>{
+    const s=rec.score||1;
+    const conf=rec.detections&&rec.detections[0]?rec.detections[0].confidence:0;
+
+    // Collect all unique types from all detections
+    const allTypes=rec.detections&&rec.detections.length
+      ?[...new Set(rec.detections.map(d=>d.class).filter(Boolean))]
+      :['Unknown'];
+
+    // Location display
+    const locDisplay=rec.loc&&rec.loc.trim()?rec.loc.trim():'Unknown location';
+    const gpsDisplay=rec.lat&&rec.lng
+      ?`${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E`
+      :'No GPS';
+
+    tb.insertAdjacentHTML('beforeend',`<tr>
+      <td><span style="font-family:'Space Mono';font-size:var(--fs-xs);color:var(--muted)">${(i+1).toString().padStart(2,'0')}</span></td>
+      <td style="max-width:160px;font-size:var(--fs-sm)">${locDisplay}</td>
+      <td style="font-family:'Space Mono';font-size:var(--fs-xs);color:var(--muted);white-space:nowrap">${gpsDisplay}</td>
+      <td>
+        <div class="sc-mini">
+          <div class="bar-m" style="width:56px"><div style="height:100%;border-radius:3px;width:${s*10}%;background:linear-gradient(90deg,${sevColor(s)},${sevColor(s)}99)"></div></div>
+          <span style="color:${sevColor(s)};font-weight:700">${s}/10</span>
+        </div>
+      </td>
+      <td><span class="sev-chip ${sevChipCls(s)}">${sevLabel(s)}</span></td>
+      <td>
+        <div class="type-pills">
+          ${allTypes.map(t=>typeTag(t)).join('')}
+        </div>
+      </td>
+      <td>
+        <div class="sc-mini">
+          <div class="bar-m"><div class="fill-m" style="width:${conf*100}%"></div></div>
+          <span style="color:var(--accent)">${conf?(conf*100).toFixed(0)+'%':'—'}</span>
+        </div>
+      </td>
     </tr>`);
   });
 }
 
-// MAP
+function typeTag(t){
+  if(!t)return`<span class="tp tp-other">Other</span>`;
+  const l=t.toLowerCase();
+  if(l.includes('pothole'))return`<span class="tp tp-pothole">Pothole</span>`;
+  if(l.includes('severe'))return`<span class="tp tp-crack-severe">Crack-Severe</span>`;
+  if(l.includes('crack'))return`<span class="tp tp-crack">Crack</span>`;
+  return`<span class="tp tp-other">${t}</span>`;
+}
+
+// ── MAP ───────────────────────────────────────────────────────
 function renderMap(){
-  const withGPS = records.filter(r => r.lat && r.lng);
-  document.getElementById('pinCount').textContent = `${withGPS.length} pins`;
+  leafletMap=L.map('leaflet-map2',{zoomControl:true,attributionControl:false});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(leafletMap);
 
-  const map = L.map('leaflet-map2',{zoomControl:true,attributionControl:false});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:18}).addTo(map);
+  // Add pulse keyframes once
+  const st=document.createElement('style');
+  st.textContent='@keyframes mPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.22}50%{transform:translate(-50%,-50%) scale(1.65);opacity:0}}';
+  document.head.appendChild(st);
 
-  const bounds = [];
-  withGPS.forEach(rec => {
-    const lat = parseFloat(rec.lat), lng = parseFloat(rec.lng);
-    if(isNaN(lat)||isNaN(lng)) return;
-    bounds.push([lat,lng]);
-    const s = rec.score||1;
-    const color = sevColor(s);
-    const size = s>=9?18:s>=7?15:s>=4?13:11;
-    const pulse = s>=9?`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${size*2.4}px;height:${size*2.4}px;border-radius:50%;background:${color};opacity:.22;animation:mPulse 1.8s ease-in-out infinite"></div>`:'';
-    const icon = L.divIcon({className:'',
+  buildMarkers();
+  fitMap(allRecords);
+}
+
+function buildMarkers(){
+  // Clear existing
+  allMarkers.forEach(({marker})=>leafletMap.removeLayer(marker));
+  allMarkers=[];
+
+  allRecords.forEach(rec=>{
+    const lat=parseFloat(rec.lat),lng=parseFloat(rec.lng);
+    if(isNaN(lat)||isNaN(lng))return;
+    const s=rec.score||1;
+    const color=sevColor(s);
+    const cat=sevCat(s);
+    const size=s>=9?18:s>=7?15:s>=4?13:11;
+    const pulse=s>=9?`<div style="position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:${size*2.4}px;height:${size*2.4}px;border-radius:50%;background:${color};opacity:.22;animation:mPulse 1.8s ease-in-out infinite"></div>`:'';
+    const icon=L.divIcon({className:'',
       html:`<div style="position:relative;display:flex;align-items:center;justify-content:center">${pulse}<div style="width:${size}px;height:${size}px;background:${color};border:2.5px solid white;border-radius:50%;box-shadow:0 0 10px ${color};position:relative;z-index:1;cursor:pointer"></div></div>`,
       iconSize:[size*2.5,size*2.5],iconAnchor:[size*1.25,size*1.25]});
-    const mainDet = rec.detections&&rec.detections[0];
-    const marker = L.marker([lat,lng],{icon}).addTo(map);
-    marker.bindPopup(`<div style="font-family:'Space Mono',monospace;min-width:180px">
-      <div style="font-weight:700;font-size:.8rem;margin-bottom:5px">${mainDet?mainDet.class:'Anomaly'}</div>
-      <div style="font-size:.7rem;color:#555;margin-bottom:3px">📍 ${rec.loc||'Unknown location'}</div>
-      <div style="font-size:.68rem;color:#777;margin-bottom:7px">${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E</div>
-      <span style="padding:2px 8px;border-radius:4px;background:${color}22;border:1px solid ${color};color:${color};font-size:.63rem;font-weight:700">${sevLabel(s)} ${s}/10</span>
+
+    const allTypes=rec.detections?[...new Set(rec.detections.map(d=>d.class).filter(Boolean))]:['Unknown'];
+    const marker=L.marker([lat,lng],{icon}).addTo(leafletMap);
+    marker.bindPopup(`<div style="font-family:'Space Mono',monospace;min-width:190px;font-size:12px">
+      <div style="font-weight:700;margin-bottom:5px">${rec.loc||'Unknown location'}</div>
+      <div style="color:#555;margin-bottom:3px">📍 ${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E</div>
+      <div style="color:#777;margin-bottom:7px">Types: ${allTypes.join(', ')}</div>
+      <span style="padding:2px 8px;border-radius:4px;background:${color}22;border:1px solid ${color};color:${color};font-weight:700">${sevLabel(s)} ${s}/10</span>
     </div>`);
-    marker.on('click',()=>{ document.getElementById('mapInfo').textContent=`📍 ${mainDet?mainDet.class:'Anomaly'} · Sev ${s}/10 · ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`; });
+    marker.on('click',()=>{
+      document.getElementById('mapInfo').textContent=
+        `📍 ${rec.loc||'Unknown location'} · ${allTypes.join(', ')} · Sev ${s}/10`;
+    });
+    allMarkers.push({marker,cat,rec});
   });
 
-  if(bounds.length>1) map.fitBounds(bounds,{padding:[40,40]});
-  else if(bounds.length===1) map.setView(bounds[0],15);
-  else map.setView([28.4595,77.0266],12);
-
-  const style=document.createElement('style');
-  style.textContent='@keyframes mPulse{0%,100%{transform:translate(-50%,-50%) scale(1);opacity:.22}50%{transform:translate(-50%,-50%) scale(1.6);opacity:0}}';
-  document.head.appendChild(style);
+  updatePinCount();
 }
 
-// COUNTS
-function renderCounts(){
-  document.getElementById('cTotal').textContent = records.length;
-  document.getElementById('cCrit').textContent  = records.filter(r=>(r.score||1)>=9).length;
-  document.getElementById('cNotified').textContent = Object.keys(notifSent).length;
-  document.getElementById('cRepaired').textContent = 0;
-}
+function refreshMapMarkers(){
+  // Determine which records to show
+  let toShow=allRecords;
+  if(searchQuery)toShow=toShow.filter(r=>(r.loc||'').toLowerCase().includes(searchQuery));
+  if(activeFilter)toShow=toShow.filter(r=>sevCat(r.score||1)===activeFilter);
 
-// NOTIFICATIONS — top 3 by severity
-function renderNotifications(){
-  const grid = document.getElementById('notifGrid');
-  const sorted = [...records].sort((a,b)=>(b.score||1)-(a.score||1)).slice(0,3);
-  if(!sorted.length){ grid.innerHTML='<div style="color:var(--muted);font-size:.8rem;grid-column:1/-1;text-align:center;padding:20px">No detections yet.</div>'; return; }
-  const clsMap = {crit:['rgba(255,68,68,.15)','rgba(255,68,68,.4)','var(--danger)'],high:['rgba(255,107,53,.1)','rgba(255,107,53,.3)','var(--accent2)'],med:['rgba(255,204,0,.1)','rgba(255,204,0,.3)','var(--warn)']};
-  grid.innerHTML='';
-  sorted.forEach(rec=>{
-    const s=rec.score||1;
-    const cat=s>=9?'crit':s>=7?'high':'med';
-    const [bg,border,color]=clsMap[cat];
-    const mainDet=rec.detections&&rec.detections[0];
-    const cls=mainDet?mainDet.class:'Anomaly';
-    const conf=mainDet?mainDet.confidence:0;
-    const sent=notifSent[rec.id];
-    const priLabel={'crit':'🔴 CRITICAL — IMMEDIATE ACTION','high':'🟠 HIGH PRIORITY','med':'🟡 MEDIUM PRIORITY'}[cat];
-    const summaries={'crit':'Severe road damage detected. Immediate repair required within 24 hours to prevent accidents.','high':'Significant road damage. Repair recommended within 72 hours.','med':'Moderate damage detected. Please schedule a repair visit.'};
-    grid.insertAdjacentHTML('beforeend',`<div class="notif-card ${cat}">
-      <div class="notif-priority" style="background:${bg};border:1px solid ${border};color:${color}">${priLabel}</div>
-      <div class="notif-loc">${rec.loc||'Unknown Location'}</div>
-      <div class="notif-summary">${summaries[cat]}</div>
-      <div class="notif-meta">
-        <span class="notif-badge">${cls}</span>
-        <span class="notif-badge">Sev: ${s}/10</span>
-        ${conf?`<span class="notif-badge">Conf: ${(conf*100).toFixed(0)}%</span>`:''}
-        ${rec.lat&&rec.lng?`<span class="notif-badge">${parseFloat(rec.lat).toFixed(4)}°N</span>`:''}
-      </div>
-      <div class="notif-footer">
-        <div class="notif-time">🕐 ${rec.timestamp||'—'}</div>
-        <button class="send-btn${sent?' sent':''}" id="sbtn-${rec.id}" onclick="sendNotif('${rec.id}',this)">${sent?'✅ Sent':'📤 Send'}</button>
-      </div>
-    </div>`);
+  const showIds=new Set(toShow.map(r=>r.id));
+  allMarkers.forEach(({marker,rec})=>{
+    if(showIds.has(rec.id)){
+      if(!leafletMap.hasLayer(marker))marker.addTo(leafletMap);
+    } else {
+      if(leafletMap.hasLayer(marker))leafletMap.removeLayer(marker);
+    }
   });
+
+  // Fit to visible
+  const visible=allMarkers.filter(({rec})=>showIds.has(rec.id));
+  if(visible.length){
+    const bounds=visible.map(({rec})=>[parseFloat(rec.lat),parseFloat(rec.lng)]);
+    if(bounds.length>1)leafletMap.fitBounds(bounds,{padding:[40,40]});
+    else leafletMap.setView(bounds[0],15);
+  }
+  updatePinCount(visible.length);
 }
 
-// REPAIR TRACKER
-function renderRepair(){
-  const list=document.getElementById('repairList');
-  if(!records.length){list.innerHTML='<div style="color:var(--muted);font-size:.8rem;text-align:center;padding:16px">No records yet.</div>';return;}
-  list.innerHTML='';
-  [...records].sort((a,b)=>(b.score||1)-(a.score||1)).slice(0,8).forEach(rec=>{
-    const s=rec.score||1;
-    const mainDet=rec.detections&&rec.detections[0];
-    list.insertAdjacentHTML('beforeend',`<div style="display:flex;align-items:center;gap:9px;padding:9px 11px;background:var(--surface2);border:1px solid var(--border);border-radius:9px">
-      <span style="font-family:'Space Mono';font-size:.66rem;color:var(--muted);flex-shrink:0">${rec.timestamp?rec.timestamp.slice(5,16):'—'}</span>
-      <span style="flex:1;font-size:.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${rec.loc||mainDet&&mainDet.class||'Unknown'}</span>
-      <span class="sev-chip ${sevChip(s)}" style="font-size:.58rem">${s}/10</span>
-      <span class="st-chip st-pending">⏳ Pending</span>
-    </div>`);
-  });
+function fitMap(records){
+  const withGPS=records.filter(r=>r.lat&&r.lng);
+  if(withGPS.length>1){
+    leafletMap.fitBounds(withGPS.map(r=>[parseFloat(r.lat),parseFloat(r.lng)]),{padding:[40,40]});
+  } else if(withGPS.length===1){
+    leafletMap.setView([parseFloat(withGPS[0].lat),parseFloat(withGPS[0].lng)],15);
+  } else {
+    leafletMap.setView([28.4595,77.0266],12);
+  }
 }
 
-// AREA (estimated from detection count × avg size)
-function renderArea(){
-  const potholes = records.filter(r=>r.detections&&r.detections.some(d=>d.class&&d.class.toLowerCase().includes('pothole')));
-  const cracks   = records.filter(r=>r.detections&&r.detections.some(d=>d.class&&d.class.toLowerCase().includes('crack')));
-  const pArea = (potholes.length*2.2).toFixed(1);
-  const cArea = (cracks.length*0.9).toFixed(1);
-  const total = (parseFloat(pArea)+parseFloat(cArea)).toFixed(1);
-  document.getElementById('totalArea').textContent = total+'m²';
-  document.getElementById('areaP').textContent     = pArea+'m²';
-  document.getElementById('areaC').textContent     = cArea+'m²';
-  document.getElementById('repairCost').textContent = '₹ '+new Intl.NumberFormat('en-IN').format(Math.round(parseFloat(total)*5000));
+function updatePinCount(n){
+  const count=n!==undefined?n:allMarkers.length;
+  document.getElementById('pinCountLabel').textContent=`${count} pin${count!==1?'s':''}`;
 }
 
-// NOTIFY
-function sendNotif(id, btn){
-  notifSent[id]=true;
-  btn.classList.add('sent'); btn.textContent='✅ Sent';
-  const sb=document.getElementById('sbtn-'+id); if(sb){sb.classList.add('sent');sb.textContent='✅ Sent';}
-  const nb=document.getElementById('ntf-'+id);  if(nb){nb.classList.add('sent');nb.textContent='✅ Sent';}
-  addAct('Municipality notified for record '+id);
-  renderCounts();
-}
-function sendAll(){ records.forEach(r=>{ if(!notifSent[r.id]){ const btn=document.getElementById('ntf-'+r.id); sendNotif(r.id,btn||document.createElement('button')); }}); }
-
-function addAct(msg){
-  const f=document.getElementById('actFeed');
-  const now=new Date().toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit'});
-  const item=document.createElement('div'); item.className='act-item';
-  item.innerHTML=`<div class="act-dot" style="background:var(--accent)"></div><div><div>${msg}</div><div class="act-time">${now}</div></div>`;
-  f.insertBefore(item,f.firstChild);
+// ── BOTTOM STATS ──────────────────────────────────────────────
+function renderBottomStats(){
+  // In production these come from DB. For now all start pending.
+  document.getElementById('bRepaired').textContent=0;
+  document.getElementById('bApproved').textContent=0;
+  document.getElementById('bPending').textContent=filteredRecords.length;
 }
 
+// ── INIT ──────────────────────────────────────────────────────
 loadData();
 </script>
 </body>
