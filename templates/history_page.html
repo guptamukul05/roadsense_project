@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>RoadSense AI — History</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{--bg:#050a12;--surface:#0b1523;--surface2:#0f1e30;--border:rgba(0,210,255,0.12);--accent:#00d2ff;--accent2:#ff6b35;--accent3:#7fff6b;--warn:#ffcc00;--danger:#ff4444;--text:#e8f4fd;--muted:#5a7a9a;--card:rgba(11,21,35,0.9);}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
+.bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;background:radial-gradient(ellipse 80% 50% at 20% 10%,rgba(0,210,255,0.07) 0%,transparent 60%)}
+.grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,210,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,210,255,0.025) 1px,transparent 1px);background-size:50px 50px}
+.wrapper{position:relative;z-index:1}
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 36px;border-bottom:1px solid var(--border);background:rgba(5,10,18,.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
+.logo-icon{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 0 18px rgba(0,210,255,.4)}
+.logo span{color:var(--accent)}
+.nav-btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);font-size:.83rem;font-weight:500;color:var(--muted);background:transparent;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
+.nav-btn:hover,.nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(0,210,255,.06)}
+.page-header{padding:28px 36px 20px;display:flex;align-items:center;justify-content:space-between}
+.page-title{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;letter-spacing:-1px}
+.page-title span{color:var(--accent)}
+.clear-btn{padding:8px 16px;border-radius:9px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:.8rem;cursor:pointer;font-family:'DM Sans';transition:all .2s}
+.clear-btn:hover{background:rgba(255,68,68,.15);border-color:var(--danger)}
+
+.history-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:18px;padding:0 36px 40px}
+.h-card{background:var(--card);border:1px solid var(--border);border-radius:16px;overflow:hidden;transition:all .3s;position:relative}
+.h-card:hover{border-color:rgba(0,210,255,.25);transform:translateY(-2px)}
+.h-card-top{height:3px}
+.h-card-img{width:100%;height:160px;object-fit:cover;display:block;background:var(--surface2)}
+.h-card-img-placeholder{width:100%;height:160px;background:var(--surface2);display:flex;align-items:center;justify-content:center;font-size:2rem;color:var(--muted)}
+.h-card-body{padding:16px}
+.h-card-type{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.h-type-badge{font-size:.65rem;font-family:'Space Mono';padding:2px 8px;border-radius:5px;font-weight:700;text-transform:uppercase}
+.h-card-loc{font-size:.82rem;font-weight:600;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.h-card-time{font-size:.7rem;color:var(--muted);font-family:'Space Mono';margin-bottom:12px}
+.h-card-scores{display:flex;gap:10px;margin-bottom:12px}
+.score-box{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px;text-align:center}
+.score-box-val{font-family:'Space Mono';font-size:1rem;font-weight:700}
+.score-box-lbl{font-size:.62rem;color:var(--muted);margin-top:2px;text-transform:uppercase;letter-spacing:.5px}
+.h-card-dets{font-size:.74rem;color:var(--muted);line-height:1.6}
+.h-card-dets span{color:var(--text);font-weight:500}
+.h-gps{font-size:.68rem;font-family:'Space Mono';color:var(--muted);margin-top:8px;padding-top:8px;border-top:1px solid var(--border)}
+
+.empty-state{text-align:center;padding:80px 36px;color:var(--muted)}
+.empty-icon{font-size:3rem;margin-bottom:16px;opacity:.4}
+.empty-title{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:8px;color:var(--text)}
+.empty-sub{font-size:.85rem;line-height:1.6}
+
+.fade-up{opacity:0;transform:translateY(18px);animation:fadeUp .5s ease forwards}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+</style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="grid-overlay"></div>
+<div class="wrapper">
+
+  <nav class="topbar">
+    <div class="logo"><div class="logo-icon">🛣</div>Road<span>Sense</span> AI</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <a href="/" class="nav-btn">📤 Upload</a>
+      <a href="/analytics" class="nav-btn">📊 Analytics</a>
+      <a href="/history_page" class="nav-btn active">🕐 History</a>
+    </div>
+  </nav>
+
+  <div class="page-header fade-up">
+    <div>
+      <div class="page-title">Detection <span>History</span></div>
+      <div style="font-size:.88rem;color:var(--muted);margin-top:4px" id="histSubtitle">Loading…</div>
+    </div>
+    <button class="clear-btn" onclick="clearHistory()">🗑 Clear All History</button>
+  </div>
+
+  <div id="historyContainer" class="history-grid"></div>
+
+</div>
+
+<script>
+const sevColor = s => s>=9?'#ff4444':s>=7?'#ff6b35':s>=4?'#ffcc00':'#7fff6b';
+const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
+
+async function loadHistory(){
+  const r = await fetch('/history');
+  const records = await r.json();
+  const container = document.getElementById('historyContainer');
+  document.getElementById('histSubtitle').textContent = records.length
+    ? `${records.length} detection${records.length!==1?'s':''} stored`
+    : 'No detections yet';
+
+  if(!records.length){
+    container.innerHTML='';
+    container.insertAdjacentHTML('beforeend',`
+      <div class="empty-state" style="grid-column:1/-1">
+        <div class="empty-icon">🕐</div>
+        <div class="empty-title">No detection history yet</div>
+        <div class="empty-sub">Upload an image or video to start detecting road anomalies.<br>Results will appear here automatically.</div>
+        <a href="/" style="display:inline-block;margin-top:18px;padding:10px 22px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;font-family:'Syne';font-weight:700;text-decoration:none;font-size:.88rem">📤 Upload Now</a>
+      </div>`);
+    return;
+  }
+
+  container.innerHTML='';
+  records.forEach((rec, i) => {
+    const s = rec.score || 1;
+    const color = sevColor(s);
+    const label = sevLabel(s);
+    const mainDet = rec.detections && rec.detections[0];
+    const allTypes = rec.detections ? [...new Set(rec.detections.map(d=>d.class))].join(', ') : 'Unknown';
+    const isVideo = rec.type === 'video';
+    const imgSrc = rec.type === 'image' && rec.result
+      ? `/static/results/${rec.result}`
+      : rec.type === 'image' && rec.original
+      ? `/static/uploads/${rec.original}` : '';
+
+    container.insertAdjacentHTML('beforeend', `
+    <div class="h-card fade-up" style="animation-delay:${i*0.06}s">
+      <div class="h-card-top" style="background:${color}"></div>
+      ${imgSrc
+        ? `<img class="h-card-img" src="${imgSrc}" alt="Detection result" onerror="this.style.display='none'">`
+        : `<div class="h-card-img-placeholder">${isVideo?'🎬':'🖼'}</div>`}
+      <div class="h-card-body">
+        <div class="h-card-type">
+          <span class="h-type-badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${label}</span>
+          <span class="h-type-badge" style="background:rgba(0,210,255,.08);color:var(--accent);border:1px solid rgba(0,210,255,.2)">${isVideo?'VIDEO':'IMAGE'}</span>
+        </div>
+        <div class="h-card-loc">${rec.loc || mainDet?.class || 'Unnamed location'}</div>
+        <div class="h-card-time">🕐 ${rec.timestamp || '—'}</div>
+        <div class="h-card-scores">
+          <div class="score-box">
+            <div class="score-box-val" style="color:${color}">${s}/10</div>
+            <div class="score-box-lbl">Severity</div>
+          </div>
+          <div class="score-box">
+            <div class="score-box-val" style="color:var(--accent)">${rec.detections?rec.detections.length:0}</div>
+            <div class="score-box-lbl">Detections</div>
+          </div>
+          <div class="score-box">
+            <div class="score-box-val" style="color:var(--accent3)">${mainDet?(mainDet.confidence*100).toFixed(0)+'%':'—'}</div>
+            <div class="score-box-lbl">Confidence</div>
+          </div>
+        </div>
+        <div class="h-card-dets">Types detected: <span>${allTypes}</span></div>
+        ${rec.lat&&rec.lng?`<div class="h-gps">📍 ${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E</div>`:''}
+      </div>
+    </div>`);
+  });
+}
+
+async function clearHistory(){
+  if(!confirm('Clear all detection history? This cannot be undone.')) return;
+  await fetch('/history/clear', {method:'POST'});
+  loadHistory();
+}
+
+loadHistory();
+</script>
+</body>
+</html>

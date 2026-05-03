@@ -1,0 +1,769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>RoadSense AI — Upload & Detect</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<style>
+:root{
+  --bg:#050a12;--surface:#0b1523;--surface2:#0f1e30;
+  --border:rgba(0,210,255,0.12);--accent:#00d2ff;--accent2:#ff6b35;
+  --accent3:#7fff6b;--warn:#ffcc00;--danger:#ff4444;
+  --text:#e8f4fd;--muted:#5a7a9a;--card:rgba(11,21,35,0.9);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh;overflow-x:hidden}
+.bg-layer{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background:radial-gradient(ellipse 80% 50% at 20% 10%,rgba(0,210,255,0.07) 0%,transparent 60%),
+    radial-gradient(ellipse 60% 40% at 80% 80%,rgba(255,107,53,0.06) 0%,transparent 55%)}
+.grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(0,210,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,210,255,0.03) 1px,transparent 1px);
+  background-size:60px 60px;animation:gridMove 20s linear infinite}
+@keyframes gridMove{0%{background-position:0 0}100%{background-position:60px 60px}}
+.particles{position:fixed;inset:0;z-index:0;pointer-events:none}
+.particle{position:absolute;border-radius:50%;background:var(--accent);opacity:0;animation:floatUp linear infinite}
+@keyframes floatUp{0%{transform:translateY(100vh) scale(0);opacity:0}10%{opacity:.35}90%{opacity:.15}100%{transform:translateY(-20px) scale(1);opacity:0}}
+.wrapper{position:relative;z-index:1}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 40px;
+  border-bottom:1px solid var(--border);background:rgba(5,10,18,.85);backdrop-filter:blur(20px);
+  position:sticky;top:0;z-index:100}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
+.logo-icon{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);
+  display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 0 18px rgba(0,210,255,.4)}
+.logo span{color:var(--accent)}
+.nav-btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);font-size:.83rem;font-weight:500;
+  color:var(--muted);background:transparent;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
+.nav-btn:hover,.nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(0,210,255,.06)}
+.status-pill{display:flex;align-items:center;gap:6px;padding:6px 14px;border-radius:50px;
+  background:rgba(127,255,107,.08);border:1px solid rgba(127,255,107,.25);
+  font-size:.72rem;font-family:'Space Mono',monospace;color:var(--accent3);margin-right:4px}
+.pulse-dot{width:7px;height:7px;border-radius:50%;background:var(--accent3);
+  box-shadow:0 0 8px var(--accent3);animation:pulse 2s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+
+/* HERO */
+.hero{padding:40px 40px 10px;max-width:1400px;margin:0 auto}
+.hero-badge{display:inline-flex;align-items:center;gap:8px;background:rgba(0,210,255,.08);
+  border:1px solid rgba(0,210,255,.2);border-radius:50px;padding:5px 16px;font-size:.72rem;
+  font-family:'Space Mono',monospace;color:var(--accent);margin-bottom:14px}
+.hero-title{font-family:'Syne',sans-serif;font-size:2.6rem;font-weight:800;line-height:1.05;letter-spacing:-1.5px;margin-bottom:10px}
+.hero-title .hl{color:var(--accent)}
+.hero-sub{font-size:.92rem;color:var(--muted);max-width:520px;line-height:1.7}
+
+/* MAIN GRID */
+.main-content{max-width:1400px;margin:0 auto;padding:24px 40px 60px;display:grid;grid-template-columns:1.15fr .85fr;gap:22px}
+
+/* CARD */
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:24px;backdrop-filter:blur(20px);transition:border-color .3s}
+.card:hover{border-color:rgba(0,210,255,.22)}
+.card-hd{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.card-icon{width:34px;height:34px;border-radius:9px;display:flex;align-items:center;justify-content:center;
+  font-size:.9rem;background:rgba(0,210,255,.1);color:var(--accent);border:1px solid rgba(0,210,255,.2)}
+.card-title{font-family:'Syne',sans-serif;font-size:.95rem;font-weight:700}
+.card-sub{font-size:.74rem;color:var(--muted);margin-top:2px}
+
+/* MODE TABS */
+.mode-tabs{display:flex;gap:8px;margin-bottom:20px}
+.mode-tab{flex:1;padding:10px;border-radius:10px;border:1px solid var(--border);background:transparent;
+  color:var(--muted);font-family:'DM Sans';font-size:.83rem;cursor:pointer;transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:6px;font-weight:500}
+.mode-tab.active{border-color:var(--accent);color:var(--accent);background:rgba(0,210,255,.07)}
+.mode-tab:hover:not(.active){border-color:rgba(0,210,255,.3);color:var(--text)}
+
+/* UPLOAD ZONE */
+.upload-zone{border:2px dashed rgba(0,210,255,.2);border-radius:14px;padding:36px 24px;text-align:center;
+  cursor:pointer;background:rgba(0,210,255,.02);transition:all .3s;position:relative;overflow:hidden}
+.upload-zone:hover{border-color:var(--accent);background:rgba(0,210,255,.04)}
+.upload-zone.dragover{border-color:var(--accent);background:rgba(0,210,255,.07);transform:scale(1.01)}
+.upload-icon{width:60px;height:60px;margin:0 auto 14px;background:linear-gradient(135deg,rgba(0,210,255,.15),rgba(0,128,255,.1));
+  border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:1.6rem;
+  border:1px solid rgba(0,210,255,.2);box-shadow:0 0 22px rgba(0,210,255,.2);animation:iconFloat 3s ease-in-out infinite}
+@keyframes iconFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+.upload-title{font-family:'Syne',sans-serif;font-weight:700;font-size:1.05rem;margin-bottom:7px}
+.upload-sub{font-size:.8rem;color:var(--muted);line-height:1.6}
+.upload-types{display:flex;gap:7px;justify-content:center;margin-top:12px;flex-wrap:wrap}
+.type-badge{font-family:'Space Mono',monospace;font-size:.65rem;
+  background:rgba(0,210,255,.08);border:1px solid rgba(0,210,255,.2);color:var(--accent);padding:3px 9px;border-radius:5px}
+
+/* PREVIEW */
+.preview-box{display:none;margin-top:16px;border-radius:12px;overflow:hidden;border:1px solid var(--border);position:relative}
+.preview-box img,.preview-box video{width:100%;max-height:240px;object-fit:cover;display:block}
+.preview-overlay{position:absolute;top:8px;right:8px;background:rgba(5,10,18,.85);border:1px solid var(--border);
+  border-radius:7px;padding:4px 10px;font-size:.68rem;font-family:'Space Mono';color:var(--accent);backdrop-filter:blur(10px)}
+.preview-badge{position:absolute;bottom:8px;left:8px;background:rgba(0,210,255,.15);border:1px solid var(--accent);
+  border-radius:7px;padding:3px 10px;font-size:.68rem;font-family:'Space Mono';color:var(--accent)}
+.remove-btn{position:absolute;top:8px;left:8px;background:rgba(255,68,68,.15);border:1px solid rgba(255,68,68,.4);
+  border-radius:7px;padding:3px 9px;font-size:.67rem;cursor:pointer;color:var(--danger);font-family:'Space Mono'}
+
+/* LIVE CAMERA SECTION */
+.camera-area{border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--surface2);
+  display:none;position:relative;min-height:200px}
+.camera-area img{width:100%;display:block;max-height:280px;object-fit:cover}
+.camera-placeholder{display:flex;align-items:center;justify-content:center;flex-direction:column;
+  gap:12px;min-height:200px;color:var(--muted)}
+.camera-placeholder .cam-icon{font-size:2.5rem;opacity:.4}
+.cam-status{position:absolute;top:8px;left:8px;padding:4px 10px;border-radius:6px;font-size:.68rem;
+  font-family:'Space Mono';background:rgba(255,68,68,.15);border:1px solid var(--danger);color:var(--danger)}
+.cam-status.live{background:rgba(127,255,107,.15);border-color:var(--accent3);color:var(--accent3)}
+
+/* MODEL SETTINGS */
+.model-settings{display:flex;flex-direction:column;gap:12px;margin-bottom:16px}
+.model-row{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px}
+.model-row-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.model-check-label{display:flex;align-items:center;gap:10px;cursor:pointer}
+.model-check-label input[type=checkbox]{width:16px;height:16px;accent-color:var(--accent);cursor:pointer}
+.model-name{font-size:.88rem;font-weight:600}
+.model-badge{font-size:.65rem;font-family:'Space Mono';padding:2px 8px;border-radius:5px;font-weight:700}
+.m1-badge{background:rgba(255,68,68,.12);color:var(--danger);border:1px solid rgba(255,68,68,.3)}
+.m2-badge{background:rgba(0,128,255,.12);color:#4da6ff;border:1px solid rgba(0,128,255,.3)}
+.conf-row{display:flex;align-items:center;gap:10px}
+.conf-label{font-size:.68rem;color:var(--muted);font-family:'Space Mono';flex-shrink:0}
+.conf-val{font-family:'Space Mono';font-size:.78rem;font-weight:700;color:var(--accent);width:36px;flex-shrink:0}
+.conf-slider{flex:1;accent-color:var(--accent);cursor:pointer}
+.model-disabled{opacity:.4;pointer-events:none}
+
+/* GPS */
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.lbl{font-size:.7rem;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);font-family:'Space Mono';margin-bottom:4px;display:block}
+.ifield{background:rgba(0,210,255,.04);border:1px solid var(--border);border-radius:9px;
+  padding:9px 13px;color:var(--text);font-family:'Space Mono';font-size:.8rem;transition:all .2s;outline:none;width:100%}
+.ifield:focus{border-color:var(--accent);background:rgba(0,210,255,.07);box-shadow:0 0 12px rgba(0,210,255,.1)}
+.ifield::placeholder{color:var(--muted)}
+.gps-btn{grid-column:1/-1;display:flex;align-items:center;justify-content:center;gap:8px;
+  background:rgba(0,210,255,.05);border:1px dashed rgba(0,210,255,.3);border-radius:9px;
+  padding:10px;cursor:pointer;color:var(--accent);font-size:.82rem;font-family:'DM Sans';transition:all .2s}
+.gps-btn:hover{background:rgba(0,210,255,.1);border-color:var(--accent)}
+
+/* TOGGLES */
+.tog-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+.tog-row:last-of-type{border-bottom:none;padding-bottom:0}
+.tog-name{font-size:.85rem;font-weight:500}
+.tog-desc{font-size:.71rem;color:var(--muted);margin-top:2px}
+.tog{width:40px;height:22px;background:var(--surface2);border-radius:50px;position:relative;cursor:pointer;
+  transition:background .3s;flex-shrink:0;border:1px solid var(--border)}
+.tog::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:var(--muted);transition:all .3s}
+.tog.on{background:rgba(0,210,255,.18);border-color:var(--accent)}
+.tog.on::after{left:20px;background:var(--accent);box-shadow:0 0 7px var(--accent)}
+
+/* RUN BUTTON */
+.run-btn{width:100%;padding:16px;border-radius:13px;border:none;
+  background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;
+  font-family:'Syne';font-weight:800;font-size:.98rem;cursor:pointer;
+  position:relative;overflow:hidden;margin-top:16px;transition:all .3s;
+  box-shadow:0 4px 26px rgba(0,210,255,.3);display:flex;align-items:center;justify-content:center;gap:8px}
+.run-btn:hover{transform:translateY(-2px);box-shadow:0 8px 34px rgba(0,210,255,.45)}
+.run-btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+.camera-run-btn{background:linear-gradient(135deg,var(--accent3),#00b347);color:#050a12}
+.camera-stop-btn{background:linear-gradient(135deg,var(--danger),#cc0000);color:white;display:none}
+
+/* PROGRESS */
+.prog-wrap{display:none}
+.stage{display:flex;align-items:center;gap:11px;padding:12px 14px;border-radius:11px;
+  border:1px solid var(--border);background:rgba(0,210,255,.01);transition:all .4s;margin-bottom:8px}
+.stage.running{border-color:var(--accent);background:rgba(0,210,255,.05)}
+.stage.done{border-color:var(--accent3);background:rgba(127,255,107,.03)}
+.s-icon{width:30px;height:30px;border-radius:8px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  font-size:.85rem;background:var(--surface2);border:1px solid var(--border);transition:all .3s}
+.stage.running .s-icon{background:rgba(0,210,255,.1);border-color:var(--accent);animation:sPulse 1s ease-in-out infinite}
+.stage.done .s-icon{background:rgba(127,255,107,.1);border-color:var(--accent3)}
+@keyframes sPulse{0%,100%{box-shadow:0 0 0 rgba(0,210,255,.4)}50%{box-shadow:0 0 10px rgba(0,210,255,.4)}}
+.s-name{font-size:.84rem;font-weight:500}
+.s-status{font-size:.7rem;color:var(--muted);margin-top:2px;font-family:'Space Mono'}
+.s-bar{height:3px;border-radius:2px;background:var(--border);margin-top:6px;overflow:hidden}
+.s-fill{height:100%;border-radius:2px;background:linear-gradient(90deg,var(--accent),#0080ff);transition:width .5s ease;width:0%}
+.stage.done .s-fill{width:100%;background:var(--accent3)}
+.stage.running .s-fill{animation:bSlide 1.5s ease-in-out infinite}
+@keyframes bSlide{0%{width:20%}100%{width:80%}}
+
+/* RESULTS */
+.res-wrap{display:none}
+.results-images{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:14px}
+.res-img-box{border-radius:10px;overflow:hidden;border:1px solid var(--border)}
+.res-img-label{font-size:.7rem;color:var(--muted);font-family:'Space Mono';padding:6px 10px;background:var(--surface2)}
+.res-img-box img{width:100%;max-height:180px;object-fit:cover;display:block}
+
+/* SEVERITY DISPLAY */
+.severity-display{background:var(--surface2);border-radius:12px;padding:16px;margin-bottom:14px;
+  border:1px solid var(--border);display:flex;align-items:center;gap:16px}
+.sev-score-big{font-family:'Space Mono';font-size:2.2rem;font-weight:700;line-height:1}
+.sev-bar-wrap{flex:1}
+.sev-bar-bg{height:10px;background:var(--border);border-radius:6px;overflow:hidden;margin-bottom:6px}
+.sev-bar-fill{height:100%;border-radius:6px;transition:width 1s ease}
+.sev-label-txt{font-size:.78rem;font-weight:600;font-family:'Space Mono'}
+.sev-desc-txt{font-size:.7rem;color:var(--muted)}
+
+/* DETECTIONS TABLE */
+.det-list{display:flex;flex-direction:column;gap:7px;margin-bottom:14px;max-height:200px;overflow-y:auto}
+.det-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:9px;
+  background:var(--surface2);border:1px solid var(--border)}
+.det-type{padding:3px 9px;border-radius:5px;font-size:.66rem;font-family:'Space Mono';font-weight:700;text-transform:uppercase;flex-shrink:0}
+.det-model-tag{font-size:.65rem;color:var(--muted);font-family:'Space Mono';flex-shrink:0}
+.sc-mini{display:flex;align-items:center;gap:5px;font-family:'Space Mono';font-size:.72rem;margin-left:auto}
+.bar-m{width:48px;height:4px;background:var(--border);border-radius:3px;overflow:hidden}
+.fill-m{height:100%;border-radius:3px;background:linear-gradient(90deg,var(--accent),#0080ff)}
+
+/* ACTION ROW */
+.act-row{display:flex;gap:8px}
+.btn-o{flex:1;padding:10px;border-radius:9px;border:1px solid var(--border);background:transparent;
+  color:var(--muted);font-family:'DM Sans';font-size:.82rem;cursor:pointer;transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:5px}
+.btn-o:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,210,255,.05)}
+.btn-p{flex:1.4;padding:10px;border-radius:9px;border:none;background:linear-gradient(135deg,var(--accent),#0080ff);
+  color:#050a12;font-family:'Syne';font-weight:700;font-size:.85rem;cursor:pointer;transition:all .2s;
+  display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none}
+.btn-p:hover{transform:translateY(-1px);box-shadow:0 5px 20px rgba(0,210,255,.35)}
+
+/* RIGHT COL */
+.right-col{display:flex;flex-direction:column;gap:20px}
+
+/* MINI MAP */
+.mini-map{border-radius:13px;overflow:hidden;height:220px;border:1px solid var(--border);position:relative}
+#leaflet-map1{width:100%;height:100%}
+.map-placeholder-box{width:100%;height:100%;background:linear-gradient(135deg,#060e1a,#0a1525);
+  display:flex;align-items:center;justify-content:center;flex-direction:column;gap:9px}
+.map-placeholder-box span{font-size:1.8rem;opacity:.3}
+.map-placeholder-box p{font-size:.72rem;color:var(--muted);font-family:'Space Mono'}
+.leaflet-tile-pane{filter:brightness(.82) saturate(.65) hue-rotate(175deg)}
+.map-coords-badge{position:absolute;bottom:8px;left:8px;background:rgba(5,10,18,.88);
+  border:1px solid var(--border);border-radius:7px;padding:4px 9px;z-index:1000;
+  font-size:.65rem;font-family:'Space Mono';color:var(--accent);backdrop-filter:blur(10px)}
+
+/* ANOMALY TYPES */
+.atype{display:flex;align-items:center;gap:11px;padding:10px 11px;border-radius:9px;margin-bottom:7px}
+.atype:last-child{margin-bottom:0}
+
+/* LOG */
+.log-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow-y:auto}
+.log-list::-webkit-scrollbar{width:3px}
+.log-list::-webkit-scrollbar-thumb{background:var(--border)}
+.log-item{display:flex;align-items:flex-start;gap:8px;padding:8px 10px;border-radius:8px;background:var(--surface2);font-size:.75rem}
+.log-dot{width:6px;height:6px;border-radius:50%;flex-shrink:0;margin-top:4px}
+.log-time{font-family:'Space Mono';color:var(--muted);font-size:.64rem}
+.log-msg{color:var(--text);line-height:1.5}
+.l-info .log-dot{background:var(--accent)}.l-warn .log-dot{background:var(--warn)}
+.l-ok .log-dot{background:var(--accent3)}.l-err .log-dot{background:var(--danger)}
+
+/* SEVERITY LEGEND PILLS */
+.sev-legend{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.sp{display:flex;align-items:center;gap:5px;font-size:.68rem;padding:3px 10px;border-radius:18px;font-family:'Space Mono'}
+.sd{width:6px;height:6px;border-radius:50%}
+.s-low{background:rgba(127,255,107,.1);color:var(--accent3);border:1px solid rgba(127,255,107,.3)}.s-low .sd{background:var(--accent3)}
+.s-med{background:rgba(255,204,0,.1);color:var(--warn);border:1px solid rgba(255,204,0,.3)}.s-med .sd{background:var(--warn)}
+.s-high{background:rgba(255,107,53,.1);color:var(--accent2);border:1px solid rgba(255,107,53,.3)}.s-high .sd{background:var(--accent2)}
+.s-crit{background:rgba(255,68,68,.1);color:var(--danger);border:1px solid rgba(255,68,68,.3)}.s-crit .sd{background:var(--danger)}
+
+/* ANIMATIONS */
+.fade-up{opacity:0;transform:translateY(18px);animation:fadeUp .5s ease forwards}
+@keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+.d1{animation-delay:.04s}.d2{animation-delay:.1s}.d3{animation-delay:.17s}.d4{animation-delay:.24s}
+::-webkit-scrollbar{width:4px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+@media(max-width:1050px){.main-content{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="bg-layer"></div>
+<div class="grid-overlay"></div>
+<div class="particles" id="particles"></div>
+
+<div class="wrapper">
+  <!-- TOPBAR -->
+  <nav class="topbar">
+    <div class="logo"><div class="logo-icon">🛣</div>Road<span>Sense</span> AI</div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <div class="status-pill">
+        <div class="pulse-dot"></div>
+        {% if model1_available or model2_available %}AI READY{% else %}NO MODEL{% endif %}
+      </div>
+      <a href="/" class="nav-btn active">📤 Upload</a>
+      <a href="/analytics" class="nav-btn">📊 Analytics</a>
+      <a href="/history_page" class="nav-btn">🕐 History</a>
+    </div>
+  </nav>
+
+  <!-- HERO -->
+  <div class="hero fade-up">
+    <div class="hero-badge">⚡ YOLOv8 · Two Models · GPS · Severity Scoring</div>
+    <h1 class="hero-title">Road Anomaly<br><span class="hl">Detection Portal</span></h1>
+    <p class="hero-sub">Upload a geotagged image or video, or use live camera. The AI detects anomalies with two models, scores severity, maps GPS location, and notifies the municipality.</p>
+  </div>
+
+  <!-- MAIN GRID -->
+  <div class="main-content">
+    <!-- LEFT -->
+    <div style="display:flex;flex-direction:column;gap:20px">
+
+      <!-- INPUT CARD -->
+      <div class="card fade-up d1">
+        <div class="card-hd"><div class="card-icon">📁</div><div><div class="card-title">Input Source</div><div class="card-sub">Image, video or live camera</div></div></div>
+
+        <!-- MODE TABS -->
+        <div class="mode-tabs">
+          <button class="mode-tab active" id="tab-image" onclick="setMode('image')">🖼 Image</button>
+          <button class="mode-tab" id="tab-video" onclick="setMode('video')">🎬 Video</button>
+          <button class="mode-tab" id="tab-camera" onclick="setMode('camera')">📷 Live Camera</button>
+        </div>
+
+        <!-- IMAGE UPLOAD -->
+        <div id="mode-image">
+          <div class="upload-zone" id="uploadZoneImg" onclick="document.getElementById('fileImg').click()">
+            <div class="upload-icon">🖼</div>
+            <div class="upload-title">Drop image here</div>
+            <div class="upload-sub">Drag & drop or click to browse<br>GPS read automatically from EXIF</div>
+            <div class="upload-types"><span class="type-badge">.jpg</span><span class="type-badge">.jpeg</span><span class="type-badge">.png</span><span class="type-badge">EXIF GPS</span></div>
+          </div>
+          <input type="file" id="fileImg" accept="image/*" style="display:none"/>
+          <div class="preview-box" id="previewImg">
+            <img id="previewImgEl" src="" alt=""/>
+            <div class="preview-overlay" id="previewImgMeta">—</div>
+            <div class="preview-badge">✅ Ready</div>
+            <div class="remove-btn" onclick="removeFile('img',event)">✕ Remove</div>
+          </div>
+          <button class="run-btn" id="runImg" onclick="runDetection('image')" style="margin-top:14px">⚡ Detect Anomalies</button>
+        </div>
+
+        <!-- VIDEO UPLOAD -->
+        <div id="mode-video" style="display:none">
+          <div class="upload-zone" id="uploadZoneVid" onclick="document.getElementById('fileVid').click()">
+            <div class="upload-icon">🎬</div>
+            <div class="upload-title">Drop video here</div>
+            <div class="upload-sub">Drag & drop or click to browse<br>Processed frame by frame</div>
+            <div class="upload-types"><span class="type-badge">.mp4</span><span class="type-badge">.avi</span><span class="type-badge">.mov</span><span class="type-badge">.mkv</span></div>
+          </div>
+          <input type="file" id="fileVid" accept="video/*" style="display:none"/>
+          <div class="preview-box" id="previewVid">
+            <video id="previewVidEl" controls muted style="max-height:220px"></video>
+            <div class="preview-overlay" id="previewVidMeta">—</div>
+            <div class="preview-badge">✅ Ready</div>
+            <div class="remove-btn" onclick="removeFile('vid',event)">✕ Remove</div>
+          </div>
+          <button class="run-btn" id="runVid" onclick="runDetection('video')" style="margin-top:14px">⚡ Process Video</button>
+        </div>
+
+        <!-- LIVE CAMERA -->
+        <div id="mode-camera" style="display:none">
+          <div class="camera-area" id="cameraArea">
+            <div class="camera-placeholder" id="camPlaceholder">
+              <div class="cam-icon">📷</div>
+              <div style="font-size:.8rem;color:var(--muted);font-family:'Space Mono'">Click Start to open camera</div>
+            </div>
+            <img id="cameraFeed" src="" style="display:none;width:100%;max-height:280px;object-fit:cover"/>
+            <div class="cam-status" id="camStatus">● OFFLINE</div>
+          </div>
+          <button class="run-btn camera-run-btn" id="startCamBtn" onclick="startCamera()" style="margin-top:14px">📷 Start Live Camera</button>
+          <button class="run-btn camera-stop-btn" id="stopCamBtn" onclick="stopCamera()" style="margin-top:14px">⏹ Stop Camera</button>
+        </div>
+      </div>
+
+      <!-- MODEL SETTINGS -->
+      <div class="card fade-up d2">
+        <div class="card-hd"><div class="card-icon">🧠</div><div><div class="card-title">Model Settings</div><div class="card-sub">Enable models & set confidence thresholds</div></div></div>
+
+        <div class="model-settings">
+          <!-- Model 1 -->
+          <div class="model-row" id="m1row">
+            <div class="model-row-top">
+              <label class="model-check-label">
+                <input type="checkbox" id="useM1" checked onchange="toggleModel(1)"/>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span class="model-name">Model 1</span>
+                    <span class="model-badge m1-badge">🔴 RED boxes</span>
+                    {% if not model1_available %}<span style="font-size:.65rem;color:var(--danger);font-family:'Space Mono'">NOT LOADED</span>{% endif %}
+                  </div>
+                  <div style="font-size:.7rem;color:var(--muted);margin-top:2px">RoadModel YOLOv8m · best.pt</div>
+                </div>
+              </label>
+            </div>
+            <div class="conf-row">
+              <span class="conf-label">Confidence:</span>
+              <input type="range" class="conf-slider" id="conf1" min="0.10" max="0.90" step="0.05" value="0.35"
+                oninput="document.getElementById('conf1val').textContent=parseFloat(this.value).toFixed(2)"/>
+              <span class="conf-val" id="conf1val">0.35</span>
+            </div>
+          </div>
+
+          <!-- Model 2 -->
+          <div class="model-row" id="m2row">
+            <div class="model-row-top">
+              <label class="model-check-label">
+                <input type="checkbox" id="useM2" checked onchange="toggleModel(2)"/>
+                <div>
+                  <div style="display:flex;align-items:center;gap:8px">
+                    <span class="model-name">Model 2</span>
+                    <span class="model-badge m2-badge">🔵 BLUE boxes</span>
+                    {% if not model2_available %}<span style="font-size:.65rem;color:var(--danger);font-family:'Space Mono'">NOT LOADED</span>{% endif %}
+                  </div>
+                  <div style="font-size:.7rem;color:var(--muted);margin-top:2px">YOLOv8 Small · 2nd model</div>
+                </div>
+              </label>
+            </div>
+            <div class="conf-row">
+              <span class="conf-label">Confidence:</span>
+              <input type="range" class="conf-slider" id="conf2" min="0.10" max="0.90" step="0.05" value="0.40"
+                oninput="document.getElementById('conf2val').textContent=parseFloat(this.value).toFixed(2)"/>
+              <span class="conf-val" id="conf2val">0.40</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="tog-row">
+          <div><div class="tog-name">Auto-Notify Municipality</div><div class="tog-desc">Send alert after detection</div></div>
+          <div class="tog" id="notifTog" onclick="this.classList.toggle('on')"></div>
+        </div>
+        <div class="tog-row">
+          <div><div class="tog-name">Save to History</div><div class="tog-desc">Store results in local history</div></div>
+          <div class="tog on" onclick="this.classList.toggle('on')"></div>
+        </div>
+      </div>
+
+      <!-- GPS CARD -->
+      <div class="card fade-up d3">
+        <div class="card-hd"><div class="card-icon">📍</div><div><div class="card-title">GPS Location</div><div class="card-sub">Auto-read from EXIF or enter manually</div></div></div>
+        <div class="grid2">
+          <div><label class="lbl">Latitude</label><input class="ifield" id="lat" type="text" placeholder="e.g. 28.4595"/></div>
+          <div><label class="lbl">Longitude</label><input class="ifield" id="lng" type="text" placeholder="e.g. 77.0266"/></div>
+          <div style="grid-column:1/-1"><label class="lbl">Address / Area</label><input class="ifield" id="locName" type="text" placeholder="e.g. Sector 14, Gurugram"/></div>
+          <button class="gps-btn" onclick="autoGPS()">🛰 Auto-detect GPS from device</button>
+        </div>
+      </div>
+
+      <!-- PROGRESS -->
+      <div class="card prog-wrap" id="progWrap">
+        <div class="card-hd">
+          <div class="card-icon" style="background:rgba(0,210,255,.1);border-color:var(--accent)">🔍</div>
+          <div><div class="card-title">Processing</div><div class="card-sub" id="progSub">Starting…</div></div>
+        </div>
+        <div id="stagesEl">
+          <div class="stage" id="s1"><div class="s-icon">📂</div><div style="flex:1"><div class="s-name">Loading File</div><div class="s-status" id="s1s">Waiting…</div><div class="s-bar"><div class="s-fill" id="s1f"></div></div></div></div>
+          <div class="stage" id="s2"><div class="s-icon">🔬</div><div style="flex:1"><div class="s-name">Extracting GPS Metadata</div><div class="s-status" id="s2s">Waiting…</div><div class="s-bar"><div class="s-fill" id="s2f"></div></div></div></div>
+          <div class="stage" id="s3"><div class="s-icon">🧠</div><div style="flex:1"><div class="s-name">Running YOLOv8 Models</div><div class="s-status" id="s3s">Waiting…</div><div class="s-bar"><div class="s-fill" id="s3f"></div></div></div></div>
+          <div class="stage" id="s4"><div class="s-icon">📊</div><div style="flex:1"><div class="s-name">Calculating Severity Score</div><div class="s-status" id="s4s">Waiting…</div><div class="s-bar"><div class="s-fill" id="s4f"></div></div></div></div>
+          <div class="stage" id="s5"><div class="s-icon">🗺</div><div style="flex:1"><div class="s-name">Saving to History & Map</div><div class="s-status" id="s5s">Waiting…</div><div class="s-bar"><div class="s-fill" id="s5f"></div></div></div></div>
+        </div>
+      </div>
+
+      <!-- RESULTS -->
+      <div class="card res-wrap" id="resWrap">
+        <div class="card-hd">
+          <div class="card-icon" style="background:rgba(127,255,107,.1);border-color:var(--accent3);color:var(--accent3)">✅</div>
+          <div><div class="card-title">Detection Complete</div><div class="card-sub" id="resSub">—</div></div>
+        </div>
+
+        <!-- SEVERITY -->
+        <div class="severity-display" id="sevDisplay">
+          <div>
+            <div style="font-size:.68rem;color:var(--muted);font-family:'Space Mono';margin-bottom:4px">SEVERITY SCORE</div>
+            <div class="sev-score-big" id="sevScore">—</div>
+            <div style="font-size:.65rem;color:var(--muted);font-family:'Space Mono';margin-top:2px">out of 10</div>
+          </div>
+          <div class="sev-bar-wrap">
+            <div class="sev-bar-bg"><div class="sev-bar-fill" id="sevBarFill" style="width:10%"></div></div>
+            <div class="sev-label-txt" id="sevLabelTxt">—</div>
+            <div class="sev-desc-txt" id="sevDescTxt">—</div>
+          </div>
+        </div>
+
+        <!-- SEVERITY LEGEND -->
+        <div class="sev-legend">
+          <div class="sp s-low"><div class="sd"></div>Low 1–3</div>
+          <div class="sp s-med"><div class="sd"></div>Medium 4–6</div>
+          <div class="sp s-high"><div class="sd"></div>High 7–8</div>
+          <div class="sp s-crit"><div class="sd"></div>Critical 9–10</div>
+        </div>
+
+        <!-- RESULT IMAGES -->
+        <div class="results-images" id="resultImages"></div>
+
+        <!-- DETECTIONS -->
+        <div style="font-size:.76rem;color:var(--muted);margin-bottom:8px;font-family:'Space Mono'" id="detLabel">Detections:</div>
+        <div class="det-list" id="detList"></div>
+
+        <div class="act-row">
+          <button class="btn-o" onclick="resetAll()">🔄 New Upload</button>
+          <a class="btn-p" href="/analytics">📊 View Analytics →</a>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COL -->
+    <div class="right-col">
+
+      <!-- MAP -->
+      <div class="card fade-up d1">
+        <div class="card-hd"><div class="card-icon">🗺</div><div><div class="card-title">GPS Preview</div><div class="card-sub">Anomaly pinned at this location</div></div></div>
+        <div class="mini-map">
+          <div id="mapPlaceholder1" class="map-placeholder-box"><span>📍</span><p>Enter coordinates to load map</p></div>
+          <div id="leaflet-map1" style="display:none;width:100%;height:100%"></div>
+          <div class="map-coords-badge" id="mapCoords">— awaiting input —</div>
+        </div>
+      </div>
+
+      <!-- ANOMALY TYPES -->
+      <div class="card fade-up d2">
+        <div class="card-hd"><div class="card-icon">📋</div><div><div class="card-title">Anomaly Types</div><div class="card-sub">What the models detect</div></div></div>
+        <div class="atype" style="background:rgba(255,68,68,.05);border:1px solid rgba(255,68,68,.15)"><span style="font-size:1.1rem">🔴</span><div><div style="font-size:.84rem;font-weight:600">Crack</div><div style="font-size:.7rem;color:var(--muted)">Surface cracking — longitudinal, transverse, alligator</div></div></div>
+        <div class="atype" style="background:rgba(255,107,53,.05);border:1px solid rgba(255,107,53,.15)"><span style="font-size:1.1rem">🟠</span><div><div style="font-size:.84rem;font-weight:600">Pothole</div><div style="font-size:.7rem;color:var(--muted)">Bowl-shaped depression, surface removed</div></div></div>
+        <div class="atype" style="background:rgba(255,204,0,.05);border:1px solid rgba(255,204,0,.15)"><span style="font-size:1.1rem">🟡</span><div><div style="font-size:.84rem;font-weight:600">Patch</div><div style="font-size:.7rem;color:var(--muted)">Previously repaired, may need re-treatment</div></div></div>
+        <div class="atype" style="background:rgba(90,122,154,.05);border:1px solid rgba(90,122,154,.15)"><span style="font-size:1.1rem">⚪</span><div><div style="font-size:.84rem;font-weight:600">Other</div><div style="font-size:.7rem;color:var(--muted)">Unclassified road surface anomaly</div></div></div>
+      </div>
+
+      <!-- LOG -->
+      <div class="card fade-up d3">
+        <div class="card-hd"><div class="card-icon">📡</div><div><div class="card-title">Activity Log</div><div class="card-sub">System events</div></div></div>
+        <div class="log-list" id="logList">
+          <div class="log-item l-ok"><div class="log-dot"></div><div><div class="log-time">—</div><div class="log-msg">System ready. Upload a file to begin.</div></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// PARTICLES
+(function(){const c=document.getElementById('particles');for(let i=0;i<16;i++){const d=document.createElement('div');d.className='particle';const s=Math.random()*4+2;d.style.cssText=`width:${s}px;height:${s}px;left:${Math.random()*100}%;animation-duration:${Math.random()*14+10}s;animation-delay:${Math.random()*10}s`;if(Math.random()>.6)d.style.background='#ff6b35';c.appendChild(d)}})();
+
+// MODE
+let currentMode='image';
+function setMode(m){
+  currentMode=m;
+  ['image','video','camera'].forEach(x=>{
+    document.getElementById('mode-'+x).style.display=x===m?'block':'none';
+    document.getElementById('tab-'+x).classList.toggle('active',x===m);
+  });
+  if(m==='camera') document.getElementById('cameraArea').style.display='block';
+  addLog('l-info',`Mode: ${m}`);
+}
+
+// FILE UPLOAD
+function setupDrop(zoneId, inputId, type){
+  const zone=document.getElementById(zoneId);
+  zone.addEventListener('dragover',e=>{e.preventDefault();zone.classList.add('dragover')});
+  zone.addEventListener('dragleave',()=>zone.classList.remove('dragover'));
+  zone.addEventListener('drop',e=>{e.preventDefault();zone.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0],type)});
+  document.getElementById(inputId).addEventListener('change',e=>{if(e.target.files[0])handleFile(e.target.files[0],type)});
+}
+setupDrop('uploadZoneImg','fileImg','img');
+setupDrop('uploadZoneVid','fileVid','vid');
+
+function handleFile(f,type){
+  const url=URL.createObjectURL(f);
+  const pb=document.getElementById('preview'+type.charAt(0).toUpperCase()+type.slice(1));
+  pb.style.display='block';
+  if(type==='img'){document.getElementById('previewImgEl').src=url;document.getElementById('previewImgMeta').textContent=`${f.name} · ${(f.size/1024/1024).toFixed(2)} MB`;}
+  else{document.getElementById('previewVidEl').src=url;document.getElementById('previewVidMeta').textContent=`${f.name} · ${(f.size/1024/1024).toFixed(2)} MB`;}
+  addLog('l-ok',`File loaded: ${f.name}`);
+}
+function removeFile(type,e){e&&e.stopPropagation();
+  const t=type==='img'?'Img':'Vid';
+  document.getElementById('preview'+t).style.display='none';
+  document.getElementById('file'+t).value='';
+  addLog('l-info','File removed.');
+}
+
+// GPS
+function autoGPS(){
+  if(navigator.geolocation){
+    navigator.geolocation.getCurrentPosition(p=>{
+      document.getElementById('lat').value=p.coords.latitude.toFixed(6);
+      document.getElementById('lng').value=p.coords.longitude.toFixed(6);
+      updateCoords(); addLog('l-ok',`GPS: ${p.coords.latitude.toFixed(4)}°N`);
+    },()=>addLog('l-warn','GPS access denied. Enter manually.'));
+  }
+}
+function updateCoords(){
+  const lat=parseFloat(document.getElementById('lat').value);
+  const lng=parseFloat(document.getElementById('lng').value);
+  if(isNaN(lat)||isNaN(lng)){document.getElementById('mapCoords').textContent='— awaiting input —';return;}
+  document.getElementById('mapCoords').textContent=`📍 ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+  document.getElementById('mapPlaceholder1').style.display='none';
+  const el=document.getElementById('leaflet-map1');el.style.display='block';
+  if(!window._map1){
+    window._map1=L.map('leaflet-map1',{zoomControl:true,attributionControl:false});
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(window._map1);
+  }
+  window._map1.setView([lat,lng],16);
+  if(window._marker1) window._map1.removeLayer(window._marker1);
+  const icon=L.divIcon({className:'',html:`<div style="width:20px;height:20px;background:#ff4444;border:3px solid white;border-radius:50%;box-shadow:0 0 10px rgba(255,68,68,.8)"></div>`,iconSize:[20,20],iconAnchor:[10,10]});
+  window._marker1=L.marker([lat,lng],{icon}).addTo(window._map1).bindPopup(`<b>Anomaly Location</b><br>${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`).openPopup();
+}
+document.getElementById('lat').addEventListener('input',updateCoords);
+document.getElementById('lng').addEventListener('input',updateCoords);
+
+// MODEL TOGGLES
+function toggleModel(n){
+  const cb=document.getElementById('useM'+n);
+  const row=document.getElementById('m'+n+'row');
+  row.style.opacity=cb.checked?'1':'0.4';
+}
+
+// SEVERITY UI
+function showSeverity(score){
+  const colors={low:'#7fff6b',med:'#ffcc00',high:'#ff6b35',crit:'#ff4444'};
+  const descs={low:'Minor wear. Monitor only.',med:'Schedule repair soon.',high:'Priority repair needed.',crit:'Immediate action required!'};
+  const cat=score>=9?'crit':score>=7?'high':score>=4?'med':'low';
+  const color=colors[cat];
+  document.getElementById('sevScore').textContent=score+'/10';
+  document.getElementById('sevScore').style.color=color;
+  document.getElementById('sevBarFill').style.width=(score*10)+'%';
+  document.getElementById('sevBarFill').style.background=`linear-gradient(90deg,${color},${color}aa)`;
+  document.getElementById('sevLabelTxt').textContent={low:'LOW',med:'MEDIUM',high:'HIGH',crit:'CRITICAL'}[cat];
+  document.getElementById('sevLabelTxt').style.color=color;
+  document.getElementById('sevDescTxt').textContent=descs[cat];
+}
+
+// DETECTION LIST
+function showDetections(dets){
+  const c=document.getElementById('detList');c.innerHTML='';
+  if(!dets||dets.length===0){c.innerHTML='<div style="font-size:.8rem;color:var(--muted);padding:10px;text-align:center">No anomalies detected</div>';return;}
+  dets.forEach(d=>{
+    const cls=d.class.toLowerCase();
+    const color=cls.includes('pothole')?'var(--accent2)':cls.includes('crack')?'var(--danger)':'var(--warn)';
+    c.insertAdjacentHTML('beforeend',`<div class="det-item">
+      <div class="det-type" style="background:${color}22;color:${color};border:1px solid ${color}55">${d.class}</div>
+      <div class="det-model-tag">${d.model}</div>
+      <div class="sc-mini" style="margin-left:auto">
+        <div class="bar-m"><div class="fill-m" style="width:${d.confidence*100}%"></div></div>
+        <span style="color:var(--accent)">${(d.confidence*100).toFixed(0)}%</span>
+      </div>
+    </div>`);
+  });
+  document.getElementById('detLabel').textContent=`${dets.length} Detection${dets.length!==1?'s':''}:`;
+}
+
+// STAGE RUNNER (visual only — real processing happens via fetch)
+const stageNames=['s1','s2','s3','s4','s5'];
+function animateStages(doneCallback){
+  let i=0;
+  const msgs=['Loading file…','Reading GPS metadata…','Running YOLOv8 models…','Calculating severity…','Saving & mapping…'];
+  const dones=['File loaded ✓','GPS extracted ✓','Models done ✓','Severity assigned ✓','Saved ✓'];
+  function next(){
+    if(i>=stageNames.length){doneCallback();return;}
+    const id=stageNames[i],el=document.getElementById(id);
+    el.classList.add('running');
+    document.getElementById(id+'s').textContent=msgs[i];
+    document.getElementById('progSub').textContent=msgs[i];
+    setTimeout(()=>{el.classList.remove('running');el.classList.add('done');document.getElementById(id+'s').textContent=dones[i];document.getElementById(id+'f').style.width='100%';i++;setTimeout(next,200);},800+Math.random()*400);
+  }
+  next();
+}
+function resetStages(){stageNames.forEach(id=>{const el=document.getElementById(id);el.classList.remove('running','done');document.getElementById(id+'s').textContent='Waiting…';document.getElementById(id+'f').style.width='0%';});}
+
+// MAIN DETECTION
+async function runDetection(type){
+  const fileInput=document.getElementById(type==='image'?'fileImg':'fileVid');
+  if(!fileInput.files[0]){addLog('l-warn','Please select a file first.');return;}
+
+  const useM1=document.getElementById('useM1').checked;
+  const useM2=document.getElementById('useM2').checked;
+  if(!useM1&&!useM2){addLog('l-warn','Enable at least one model.');return;}
+
+  const btnId=type==='image'?'runImg':'runVid';
+  document.getElementById(btnId).disabled=true;
+  document.getElementById('progWrap').style.display='block';
+  document.getElementById('resWrap').style.display='none';
+  resetStages();
+  addLog('l-info',`Detection started (${type})…`);
+
+  const fd=new FormData();
+  fd.append('file',fileInput.files[0]);
+  fd.append('use_m1',useM1?'true':'false');
+  fd.append('use_m2',useM2?'true':'false');
+  fd.append('conf1',document.getElementById('conf1').value);
+  fd.append('conf2',document.getElementById('conf2').value);
+  fd.append('lat',document.getElementById('lat').value);
+  fd.append('lng',document.getElementById('lng').value);
+  fd.append('loc',document.getElementById('locName').value);
+
+  const endpoint=type==='image'?'/detect/image':'/detect/video';
+
+  // Start stage animation, then fetch
+  animateStages(()=>{});
+  try{
+    const r=await fetch(endpoint,{method:'POST',body:fd});
+    const data=await r.json();
+    if(data.error){addLog('l-err','Error: '+data.error);document.getElementById('btnId').disabled=false;return;}
+
+    // Show results
+    document.getElementById('resWrap').style.display='block';
+    document.getElementById('resSub').textContent=`${data.detections?.length||0} anomalies detected`;
+    showSeverity(data.score||1);
+    showDetections(data.detections||[]);
+
+    // Images
+    const imgBox=document.getElementById('resultImages');
+    imgBox.innerHTML='';
+    if(type==='image'&&data.original_url&&data.result_url){
+      imgBox.innerHTML=`<div class="res-img-box"><div class="res-img-label">Original</div><img src="${data.original_url}" alt="Original"/></div>
+        <div class="res-img-box"><div class="res-img-label">Detected</div><img src="${data.result_url}" alt="Result"/></div>`;
+    } else if(type==='video'&&data.result_url){
+      imgBox.style.gridTemplateColumns='1fr';
+      imgBox.innerHTML=`<div class="res-img-box"><div class="res-img-label">Processed Video</div>
+        <video controls style="width:100%;max-height:200px"><source src="${data.result_url}" type="video/mp4"></video></div>`;
+    }
+
+    addLog('l-ok',`Complete — ${data.detections?.length||0} anomalies · Severity ${data.score}/10 (${data.severity})`);
+  }catch(e){
+    addLog('l-err','Request failed: '+e.message);
+  }
+  document.getElementById(btnId).disabled=false;
+}
+
+// LIVE CAMERA
+let cameraRunning=false;
+async function startCamera(){
+  const useM1=document.getElementById('useM1').checked;
+  const useM2=document.getElementById('useM2').checked;
+  await fetch('/camera/start',{method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({use_m1:useM1,use_m2:useM2,conf1:parseFloat(document.getElementById('conf1').value),conf2:parseFloat(document.getElementById('conf2').value)})});
+  cameraRunning=true;
+  document.getElementById('camPlaceholder').style.display='none';
+  const feed=document.getElementById('cameraFeed');
+  feed.style.display='block';
+  feed.src='/camera/stream?t='+Date.now();
+  document.getElementById('camStatus').textContent='● LIVE';
+  document.getElementById('camStatus').className='cam-status live';
+  document.getElementById('startCamBtn').style.display='none';
+  document.getElementById('stopCamBtn').style.display='flex';
+  addLog('l-ok','Live camera started');
+}
+async function stopCamera(){
+  await fetch('/camera/stop',{method:'POST'});
+  cameraRunning=false;
+  document.getElementById('cameraFeed').src='';
+  document.getElementById('cameraFeed').style.display='none';
+  document.getElementById('camPlaceholder').style.display='flex';
+  document.getElementById('camStatus').textContent='● OFFLINE';
+  document.getElementById('camStatus').className='cam-status';
+  document.getElementById('startCamBtn').style.display='flex';
+  document.getElementById('stopCamBtn').style.display='none';
+  addLog('l-info','Camera stopped');
+}
+
+// RESET
+function resetAll(){
+  document.getElementById('progWrap').style.display='none';
+  document.getElementById('resWrap').style.display='none';
+  removeFile('img');removeFile('vid');
+  resetStages();
+  addLog('l-info','Reset. Ready for new upload.');
+}
+
+// LOG
+function addLog(cls,msg){
+  const list=document.getElementById('logList');
+  const now=new Date().toTimeString().slice(0,8);
+  const item=document.createElement('div');item.className=`log-item ${cls}`;
+  item.innerHTML=`<div class="log-dot"></div><div><div class="log-time">${now}</div><div class="log-msg">${msg}</div></div>`;
+  list.insertBefore(item,list.firstChild);
+  if(list.children.length>12)list.removeChild(list.lastChild);
+}
+</script>
+</body>
+</html>
