@@ -10,15 +10,17 @@ from flask import (
 )
 import cv2
 import os
+import shutil
+import subprocess
 import time
 import uuid
 import json
 import base64
 import threading
 import numpy as np
-from pathlib import Path
+import tempfile
 from datetime import datetime
-from werkzeug.utils import secure_filename
+from pathlib import Path
 
 from ultralytics import YOLO
 import supervision as sv
@@ -63,21 +65,19 @@ try:
     if MODEL1_PATH.is_file():
         model1 = YOLO(str(MODEL1_PATH))
         names1 = model1.names
-        print("✅ Model 1 loaded")
     else:
-        print(f"⚠️  Model 1 not found at {MODEL1_PATH}")
+        print(f"Model 1 not found at {MODEL1_PATH}")
 except Exception as e:
-    print(f"❌ Model 1 failed: {e}")
+    print(f"Model 1 failed to load: {e}")
 
 try:
     if MODEL2_PATH.is_file():
         model2 = YOLO(str(MODEL2_PATH))
         names2 = model2.names
-        print("✅ Model 2 loaded")
     else:
-        print(f"⚠️  Model 2 not found at {MODEL2_PATH}")
+        print(f"Model 2 not found at {MODEL2_PATH}")
 except Exception as e:
-    print(f"❌ Model 2 failed: {e}")
+    print(f"Model 2 failed to load: {e}")
 
 # ─── SUPERVISION ANNOTATORS ───────────────────────────────────
 box1   = sv.BoxAnnotator(thickness=2, color=sv.Color.RED)
@@ -157,6 +157,29 @@ def save_history(entry):
     history = history[:50]           # keep last 50
     with open(app.config["HISTORY_FILE"], "w") as f:
         json.dump(history, f)
+
+def transcode_mp4_h264_web(src_path: str, dst_path: str) -> bool:
+    """H.264 + yuv420p + faststart — HTML5 `<video>` compatible (OpenCV mp4v often is not)."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        return False
+    try:
+        subprocess.run(
+            [
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-i", src_path,
+                "-c:v", "libx264", "-preset", "fast", "-crf", "23",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                "-an",
+                dst_path,
+            ],
+            check=True,
+            timeout=3600,
+        )
+        return os.path.isfile(dst_path) and os.path.getsize(dst_path) > 0
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        return False
 
 def frame_to_b64(frame):
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -290,56 +313,158 @@ def detect_video():
     if ext not in ALLOWED_VIDEOS:
         return jsonify({"error": "Invalid video format"}), 400
 
-    fname = f"{uuid.uuid4().hex}.{ext}"
-    fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
-    file.save(fpath)
+    input_tmp_path = None
+    output_tmp_path = None
+    cap = None
+    writer = None
+    
+    try:
+        # ─── SAVE INPUT TO TEMP FILE ───
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            input_tmp_path = tmp.name
+            tmp.write(file.read())
 
-    rname = f"result_{uuid.uuid4().hex}.mp4"
-    rpath = os.path.join(app.config["RESULT_FOLDER"], rname)
+        # ─── OPEN INPUT VIDEO ───
+        cap = cv2.VideoCapture(input_tmp_path)
+        if not cap.isOpened():
+            return jsonify({"error": "Cannot read input video"}), 400
+        
+        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        raw_fps = float(cap.get(cv2.CAP_PROP_FPS) or 0.0)
+        if raw_fps <= 0.01 or raw_fps != raw_fps:  # missing, zero, or NaN
+            raw_fps = 30.0
+        fps = max(1.0, min(raw_fps, 120.0))
 
-    cap = cv2.VideoCapture(fpath)
-    fps  = cap.get(cv2.CAP_PROP_FPS) or 25
-    w    = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h    = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    out  = cv2.VideoWriter(rpath, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+        if width <= 1 or height <= 1:
+            return jsonify({"error": "Cannot read video dimensions"}), 400
+        
+        # Ensure even dimensions (required by many codecs)
+        width = width if width % 2 == 0 else width - 1
+        height = height if height % 2 == 0 else height - 1
+        
+        # ─── CREATE OUTPUT TEMP FILE ───
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
+            output_tmp_path = tmp.name
+        
+        # ─── INITIALIZE VIDEO WRITER ───
+        fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        writer = cv2.VideoWriter(output_tmp_path, fourcc, fps, (width, height))
+        
+        if not writer.isOpened():
+            return jsonify({"error": "VideoWriter initialization failed"}), 500
 
-    all_dets, all_scores = [], []
-    frame_idx = 0
-    while True:
-        ret, frame = cap.read()
-        if not ret: break
-        if frame_idx % 2 == 0:    # process every 2nd frame for speed
+        # ─── PROCESS VIDEO ───
+        all_dets, all_scores = [], []
+        frame_idx = 0
+        
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            
+            if frame is None or frame.size == 0:
+                frame_idx += 1
+                continue
+            
+            # Resize if needed
+            if frame.shape[1] != width or frame.shape[0] != height:
+                frame = cv2.resize(frame, (width, height))
+            
             ann, dets, score = process_frame(frame, use_m1, use_m2, conf1, conf2)
             all_dets.extend(dets)
             all_scores.append(score)
-            last_ann = ann
-        out.write(last_ann if frame_idx % 2 == 1 else ann)
-        frame_idx += 1
-
-    cap.release(); out.release()
-
-    avg_score = round(sum(all_scores)/len(all_scores)) if all_scores else 1
-
-    entry = {
-        "id":         uuid.uuid4().hex[:8],
-        "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        "type":       "video",
-        "original":   fname,
-        "result":     rname,
-        "detections": all_dets[:20],
-        "score":      avg_score,
-        "severity":   severity_label(avg_score),
-        "lat": lat, "lng": lng, "loc": loc,
-    }
-    save_history(entry)
-
-    return jsonify({
-        "result_url": url_for("static", filename=f"results/{rname}"),
-        "detections": all_dets[:20],
-        "score":      avg_score,
-        "severity":   severity_label(avg_score),
-        "entry_id":   entry["id"],
-    })
+            
+            # Ensure proper format
+            if ann is None or ann.size == 0:
+                ann = frame
+            if ann.dtype != np.uint8:
+                ann = np.uint8(np.clip(ann, 0, 255))
+            if ann.shape != (height, width, 3):
+                ann = cv2.resize(ann, (width, height))
+            
+            writer.write(ann)
+            
+            frame_idx += 1
+        
+        # ─── FINALIZE (release once; finally must not double-release or MP4 moov is corrupted)
+        if cap is not None:
+            cap.release()
+            cap = None
+        if writer is not None:
+            writer.release()
+            writer = None
+        
+        # OpenCV's mp4v is MPEG-4 Part 2 — often won't play in Safari / some browsers
+        if os.path.exists(output_tmp_path) and os.path.getsize(output_tmp_path) > 0:
+            fd, web_tmp = tempfile.mkstemp(suffix=".mp4")
+            os.close(fd)
+            if transcode_mp4_h264_web(output_tmp_path, web_tmp):
+                try:
+                    os.remove(output_tmp_path)
+                except OSError:
+                    pass
+                output_tmp_path = web_tmp
+            else:
+                try:
+                    os.remove(web_tmp)
+                except OSError:
+                    pass
+        
+        if os.path.exists(output_tmp_path):
+            # Move to final location
+            rname = f"result_{uuid.uuid4().hex}.mp4"
+            rpath = os.path.join(app.config["RESULT_FOLDER"], rname)
+            os.rename(output_tmp_path, rpath)
+        else:
+            return jsonify({"error": "Output file creation failed"}), 500
+        
+        # ─── SAVE HISTORY ───
+        avg_score = round(sum(all_scores)/len(all_scores)) if all_scores else 1
+        entry = {
+            "id":         uuid.uuid4().hex[:8],
+            "timestamp":  datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type":       "video",
+            "original":   file.filename,
+            "result":     rname,
+            "detections": all_dets[:20],
+            "score":      avg_score,
+            "severity":   severity_label(avg_score),
+            "lat": lat, "lng": lng, "loc": loc,
+        }
+        save_history(entry)
+        
+        return jsonify({
+            "result_url": url_for("static", filename=f"results/{rname}"),
+            "detections": all_dets[:20],
+            "score":      avg_score,
+            "severity":   severity_label(avg_score),
+            "entry_id":   entry["id"],
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({"error": f"Video processing error: {str(e)}"}), 500
+        
+    finally:
+        # Cleanup
+        if cap is not None:
+            cap.release()
+        if writer is not None:
+            writer.release()
+        
+        if input_tmp_path and os.path.exists(input_tmp_path):
+            try:
+                os.remove(input_tmp_path)
+            except OSError:
+                pass
+        
+        if output_tmp_path and os.path.exists(output_tmp_path):
+            try:
+                os.remove(output_tmp_path)
+            except OSError:
+                pass
 
 # ── LIVE CAMERA ──
 @app.route("/camera/start", methods=["POST"])
