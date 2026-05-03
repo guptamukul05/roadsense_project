@@ -167,6 +167,12 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
   padding:10px;cursor:pointer;color:var(--accent);font-size:var(--fs-sm);
   font-family:'DM Sans';transition:all .2s}
 .gps-btn:hover{background:rgba(0,210,255,.09);border-color:var(--accent)}
+.location-display-row{grid-column:1/-1;padding:10px 12px;border-radius:9px;background:var(--surface2);
+  border:1px solid var(--border)}
+.location-display-lbl{font-size:var(--fs-xs);text-transform:uppercase;letter-spacing:.7px;
+  color:var(--muted);font-family:'Space Mono';margin-bottom:4px}
+.location-display{font-size:var(--fs-sm);font-weight:600;color:var(--text);line-height:1.35}
+.location-status{display:none;margin-top:6px;font-size:var(--fs-xs);color:var(--muted);line-height:1.45}
 
 /* ── TOGGLE ── */
 .tog-row{display:flex;align-items:center;justify-content:space-between;
@@ -468,9 +474,12 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
         <div class="grid2">
           <div><label class="lbl">Latitude</label><input class="ifield" id="lat" type="text" placeholder="e.g. 28.4595"/></div>
           <div><label class="lbl">Longitude</label><input class="ifield" id="lng" type="text" placeholder="e.g. 77.0266"/></div>
-          <div style="grid-column:1/-1">
-            <label class="lbl">Area / Address Name</label>
-            <input class="ifield" id="locName" type="text" placeholder="e.g. Sector 14, Gurugram, Haryana"/>
+          <div><label class="lbl">City</label><input class="ifield" id="city" type="text" placeholder="e.g. Gurugram"/></div>
+          <div><label class="lbl">State / Region</label><input class="ifield" id="state" type="text" placeholder="e.g. Haryana"/></div>
+          <div class="location-display-row">
+            <div class="location-display-lbl">Location (from city &amp; state)</div>
+            <div class="location-display" id="locationDisplay">—</div>
+            <div class="location-status" id="locationStatus"></div>
           </div>
           <button class="gps-btn" onclick="autoGPS()">🛰 Auto-detect GPS from this device</button>
         </div>
@@ -644,7 +653,9 @@ function setupDrop(zoneId,inputId,type){
 setupDrop('uzImg','fileImg','Img');
 setupDrop('uzVid','fileVid','Vid');
 
-function handleFile(f,type){
+let mediaPickGeneration=0;
+
+async function handleFile(f,type){
   const url=URL.createObjectURL(f);
   document.getElementById('prev'+type).style.display='block';
   if(type==='Img'){
@@ -654,29 +665,138 @@ function handleFile(f,type){
     document.getElementById('prevVidEl').src=url;
     document.getElementById('prevVidMeta').textContent=`${f.name} · ${(f.size/1024/1024).toFixed(2)} MB`;
   }
+
+  const myGen=++mediaPickGeneration;
+  const st=document.getElementById('locationStatus');
+  st.style.display='block';
+  st.textContent='Reading GPS from file…';
+  st.style.color='var(--muted)';
+  document.getElementById('lat').value='';
+  document.getElementById('lng').value='';
+  document.getElementById('city').value='';
+  document.getElementById('state').value='';
+  refreshLocationDisplay();
+  updateCoords();
+
+  try{
+    const fd=new FormData();
+    fd.append('file',f);
+    const r=await fetch('/detect/location',{method:'POST',body:fd});
+    const data=await r.json();
+    if(myGen!==mediaPickGeneration)return;
+
+    if(r.ok&&data.lat!=null&&data.lng!=null){
+      document.getElementById('lat').value=String(data.lat);
+      document.getElementById('lng').value=String(data.lng);
+      document.getElementById('city').value=data.city||'';
+      document.getElementById('state').value=data.state||'';
+      refreshLocationDisplay();
+      updateCoords();
+      if(data.reverse_geocode_error&&(!data.city&&!data.state)){
+        st.textContent='GPS found; area name unavailable ('+data.reverse_geocode_error+').';
+        st.style.color='var(--warn)';
+      }else{
+        st.style.display='none';
+        st.textContent='';
+      }
+    }else{
+      document.getElementById('lat').value='';
+      document.getElementById('lng').value='';
+      document.getElementById('city').value='';
+      document.getElementById('state').value='';
+      refreshLocationDisplay();
+      updateCoords();
+      st.textContent=(data&&data.error)?data.error:'No GPS metadata in this file. Enter coordinates manually.';
+      st.style.color='var(--muted)';
+    }
+  }catch(_){
+    if(myGen!==mediaPickGeneration)return;
+    document.getElementById('lat').value='';
+    document.getElementById('lng').value='';
+    document.getElementById('city').value='';
+    document.getElementById('state').value='';
+    refreshLocationDisplay();
+    updateCoords();
+    st.textContent='Could not read location from file. Enter manually.';
+    st.style.color='var(--warn)';
+  }
 }
 function removeFile(type,e){
   e&&e.stopPropagation();
   document.getElementById('prev'+type).style.display='none';
   document.getElementById('file'+type).value='';
+  mediaPickGeneration++;
+  clearLocationFields();
 }
 
 // ── GPS ────────────────────────────────────────────────────────
+function escapeHtml(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatLocationDisplay(){
+  const c=(document.getElementById('city').value||'').trim();
+  const s=(document.getElementById('state').value||'').trim();
+  if(c&&s)return c+', '+s;
+  if(c)return c;
+  if(s)return s;
+  return '';
+}
+function refreshLocationDisplay(){
+  const t=formatLocationDisplay();
+  document.getElementById('locationDisplay').textContent=t||'—';
+}
+function clearLocationFields(){
+  document.getElementById('lat').value='';
+  document.getElementById('lng').value='';
+  document.getElementById('city').value='';
+  document.getElementById('state').value='';
+  const st=document.getElementById('locationStatus');
+  st.style.display='none';
+  st.textContent='';
+  refreshLocationDisplay();
+  updateCoords();
+}
+async function reverseFillCityState(lat,lng){
+  try{
+    const r=await fetch('/api/geocode/reverse',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({lat,lon:lng})});
+    if(!r.ok)return;
+    const j=await r.json();
+    document.getElementById('city').value=j.city||'';
+    document.getElementById('state').value=j.state||'';
+    refreshLocationDisplay();
+  }catch(_){/* ignore */}
+}
 function autoGPS(){
   if(!navigator.geolocation){alert('Geolocation not supported in this browser.');return;}
-  navigator.geolocation.getCurrentPosition(p=>{
-    document.getElementById('lat').value=p.coords.latitude.toFixed(6);
-    document.getElementById('lng').value=p.coords.longitude.toFixed(6);
+  navigator.geolocation.getCurrentPosition(async p=>{
+    const la=parseFloat(p.coords.latitude);
+    const lo=parseFloat(p.coords.longitude);
+    document.getElementById('lat').value=la.toFixed(6);
+    document.getElementById('lng').value=lo.toFixed(6);
     updateCoords();
+    await reverseFillCityState(la,lo);
   },()=>alert('GPS access denied. Please enter coordinates manually.'));
+}
+function mapCoordsBadgeText(lat,lng){
+  const loc=formatLocationDisplay();
+  const coord=`${lat.toFixed(4)}°, ${lng.toFixed(4)}°`;
+  return loc?('📍 '+loc+' · '+coord):('📍 '+coord);
 }
 function updateCoords(){
   const lat=parseFloat(document.getElementById('lat').value);
   const lng=parseFloat(document.getElementById('lng').value);
   if(isNaN(lat)||isNaN(lng)){
-    document.getElementById('mapCoords').textContent='— awaiting input —';return;
+    document.getElementById('mapCoords').textContent='— awaiting input —';
+    document.getElementById('mapPH').style.display='flex';
+    document.getElementById('leaflet-map1').style.display='none';
+    if(window._marker1&&window._map1){
+      window._map1.removeLayer(window._marker1);
+      window._marker1=null;
+    }
+    return;
   }
-  document.getElementById('mapCoords').textContent=`📍 ${lat.toFixed(4)}°N, ${lng.toFixed(4)}°E`;
+  document.getElementById('mapCoords').textContent=mapCoordsBadgeText(lat,lng);
   document.getElementById('mapPH').style.display='none';
   const el=document.getElementById('leaflet-map1');el.style.display='block';
   if(!window._map1){
@@ -688,11 +808,35 @@ function updateCoords(){
   const icon=L.divIcon({className:'',
     html:`<div style="width:20px;height:20px;background:#ff4444;border:3px solid white;border-radius:50%;box-shadow:0 0 10px rgba(255,68,68,.8)"></div>`,
     iconSize:[20,20],iconAnchor:[10,10]});
+  const loc=formatLocationDisplay();
+  const popupLines=loc
+    ?('<b>'+escapeHtml(loc)+'</b><br>'+lat.toFixed(5)+'°, '+lng.toFixed(5)+'°')
+    :('<b>Anomaly Location</b><br>'+lat.toFixed(5)+'°, '+lng.toFixed(5)+'°');
   window._marker1=L.marker([lat,lng],{icon}).addTo(window._map1)
-    .bindPopup(`<b>Anomaly Location</b><br>${lat.toFixed(5)}°N, ${lng.toFixed(5)}°E`).openPopup();
+    .bindPopup(popupLines).openPopup();
 }
-document.getElementById('lat').addEventListener('input',updateCoords);
-document.getElementById('lng').addEventListener('input',updateCoords);
+function onLatLngInput(){
+  updateCoords();
+}
+function onCityStateInput(){
+  refreshLocationDisplay();
+  const lat=parseFloat(document.getElementById('lat').value);
+  const lng=parseFloat(document.getElementById('lng').value);
+  if(!isNaN(lat)&&!isNaN(lng)){
+    document.getElementById('mapCoords').textContent=mapCoordsBadgeText(lat,lng);
+    if(window._marker1&&window._map1){
+      const loc=formatLocationDisplay();
+      const popupLines=loc
+        ?('<b>'+escapeHtml(loc)+'</b><br>'+lat.toFixed(5)+'°, '+lng.toFixed(5)+'°')
+        :('<b>Anomaly Location</b><br>'+lat.toFixed(5)+'°, '+lng.toFixed(5)+'°');
+      window._marker1.bindPopup(popupLines);
+    }
+  }
+}
+document.getElementById('lat').addEventListener('input',onLatLngInput);
+document.getElementById('lng').addEventListener('input',onLatLngInput);
+document.getElementById('city').addEventListener('input',onCityStateInput);
+document.getElementById('state').addEventListener('input',onCityStateInput);
 
 // ── SEVERITY DISPLAY ───────────────────────────────────────────
 function showSeverity(score){
@@ -761,7 +905,8 @@ async function runDetection(type){
   fd.append('conf2',document.getElementById('conf2').value);
   fd.append('lat',document.getElementById('lat').value);
   fd.append('lng',document.getElementById('lng').value);
-  fd.append('loc',document.getElementById('locName').value);
+  fd.append('city',document.getElementById('city').value);
+  fd.append('state',document.getElementById('state').value);
 
   try{
     const r=await fetch(type==='image'?'/detect/image':'/detect/video',{method:'POST',body:fd});
@@ -774,7 +919,18 @@ async function runDetection(type){
 
     // Show results ONLY after loading is done
     document.getElementById('resWrap').style.display='block';
-    document.getElementById('resSub').textContent=`${data.detections?.length||0} anomalies detected`;
+    const savedPlace=[data.city,data.state].filter(x=>x&&String(x).trim()).join(', ');
+    document.getElementById('resSub').textContent=savedPlace
+      ?`${data.detections?.length||0} anomalies detected · ${savedPlace}`
+      :`${data.detections?.length||0} anomalies detected`;
+    if(data.lat!=null&&data.lng!=null){
+      document.getElementById('lat').value=String(data.lat);
+      document.getElementById('lng').value=String(data.lng);
+    }
+    if('city' in data)document.getElementById('city').value=data.city==null?'':String(data.city);
+    if('state' in data)document.getElementById('state').value=data.state==null?'':String(data.state);
+    refreshLocationDisplay();
+    updateCoords();
     showSeverity(data.score||1);
     showDetections(data.detections||[]);
 
@@ -827,6 +983,7 @@ async function stopCamera(){
 function resetAll(){
   document.getElementById('loadingWrap').style.display='none';
   document.getElementById('resWrap').style.display='none';
+  mediaPickGeneration++;
   removeFile('Img');removeFile('Vid');
 }
 </script>

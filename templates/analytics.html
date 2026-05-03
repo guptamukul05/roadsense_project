@@ -234,7 +234,7 @@ tr:hover td{background:rgba(0,210,255,.02)}
       <input class="search-input" id="areaSearch" type="text"
         placeholder="Search area or location — e.g. Noida, Sector 14, MG Road…"
         onkeydown="if(event.key==='Enter')searchArea()"/>
-      <button class="search-btn" onclick="searchArea()">Search</button>
+      <button class="search-btn" id="areaSearchBtn" type="button" onclick="searchArea()">Search</button>
       <button class="search-clear" onclick="clearSearch()">✕ Clear</button>
     </div>
     <div style="padding:0 36px;margin-top:10px" id="searchNoteWrap" style="display:none">
@@ -426,6 +426,10 @@ let allRecords = [];
 let filteredRecords = [];
 let activeFilter = null;   // 'crit' | 'high' | 'med' | 'low' | null
 let searchQuery = '';
+let searchMode = null; // null | 'geo' | 'text'
+let searchBBox = null; // { south, north, west, east } or null
+let searchGeojson = null;
+let searchMatchedName = '';
 let leafletMap = null;
 let allMarkers = [];
 
@@ -436,7 +440,7 @@ const sevChipCls = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
 function placeLabel(rec) {
   const p = [rec.city, rec.state].filter(x => x && String(x).trim());
   if (p.length) return p.join(', ');
-  return rec.loc || '';
+  return '';
 }
 
 // ── LOAD DATA ─────────────────────────────────────────────────
@@ -509,34 +513,143 @@ function clearSevFilter(){
   refreshMapMarkers();
 }
 
-// ── AREA SEARCH ───────────────────────────────────────────────
-function searchArea(){
-  const q=document.getElementById('areaSearch').value.trim().toLowerCase();
-  if(!q)return;
+// ── AREA SEARCH (Nominatim bbox / polygon + text fallback) ───
+function textSearchMatch(r,q){
+  const label=(placeLabel(r)||'').toLowerCase();
+  const lat=(r.lat!=null?r.lat:'').toString().toLowerCase();
+  const lng=(r.lng!=null?r.lng:'').toString().toLowerCase();
+  return label.includes(q)||lat.includes(q)||lng.includes(q);
+}
+
+function pointInBbox(lat,lng,bb){
+  const la=parseFloat(lat),lo=parseFloat(lng);
+  if(isNaN(la)||isNaN(lo)||!bb)return false;
+  const{south,north,west,east}=bb;
+  if([south,north,west,east].some(x=>typeof x!=='number'||isNaN(x)))return false;
+  return la>=south&&la<=north&&lo>=west&&lo<=east;
+}
+
+function pointInRingLngLat(lng,lat,ring){
+  if(!ring||ring.length<3)return false;
+  let inside=false;
+  for(let i=0,j=ring.length-1;i<ring.length;j=i++){
+    const xi=ring[i][0],yi=ring[i][1];
+    const xj=ring[j][0],yj=ring[j][1];
+    const intersect=(yi>lat)!==(yj>lat)&&lng<((xj-xi)*(lat-yi))/(yj-yi+1e-12)+xi;
+    if(intersect)inside=!inside;
+  }
+  return inside;
+}
+
+function pointInPolygonCoords(lng,lat,polyCoords){
+  if(!polyCoords||!polyCoords.length)return false;
+  const exterior=polyCoords[0];
+  if(!pointInRingLngLat(lng,lat,exterior))return false;
+  for(let h=1;h<polyCoords.length;h++){
+    if(pointInRingLngLat(lng,lat,polyCoords[h]))return false;
+  }
+  return true;
+}
+
+function pointInGeoJSON(lat,lng,gj){
+  const lo=parseFloat(lng),la=parseFloat(lat);
+  if(isNaN(lo)||isNaN(la)||!gj)return false;
+  if(gj.type==='Polygon'&&gj.coordinates&&gj.coordinates.length)
+    return pointInPolygonCoords(lo,la,gj.coordinates);
+  if(gj.type==='MultiPolygon'&&gj.coordinates){
+    for(const poly of gj.coordinates){
+      if(poly&&pointInPolygonCoords(lo,la,poly))return true;
+    }
+  }
+  return false;
+}
+
+function pointInGeocodeArea(lat,lng,bb,gj){
+  if(gj&&(gj.type==='Polygon'||gj.type==='MultiPolygon')&&gj.coordinates&&gj.coordinates.length)
+    return pointInGeoJSON(lat,lng,gj);
+  return pointInBbox(lat,lng,bb);
+}
+
+function recordInGeoSearch(rec){
+  if(rec.lat==null||rec.lng==null||rec.lat===''||rec.lng==='')return false;
+  return pointInGeocodeArea(rec.lat,rec.lng,searchBBox,searchGeojson);
+}
+
+async function searchArea(){
+  const raw=document.getElementById('areaSearch').value.trim();
+  if(!raw)return;
+  const q=raw.toLowerCase();
   searchQuery=q;
-  filteredRecords=allRecords.filter(r=>{
-    const label=(placeLabel(r)||'').toLowerCase();
-    const loc=(r.loc||'').toLowerCase();
-    const lat=(r.lat!=null?r.lat:'').toString().toLowerCase();
-    const lng=(r.lng!=null?r.lng:'').toString().toLowerCase();
-    return label.includes(q)||loc.includes(q)||lat.includes(q)||lng.includes(q);
-  });
+  searchMode=null;
+  searchBBox=null;
+  searchGeojson=null;
+  searchMatchedName='';
+
+  const btn=document.getElementById('areaSearchBtn');
+  const prevLabel=btn?btn.textContent:'Search';
+  if(btn){btn.disabled=true;btn.textContent='Searching…';}
+
+  let usedGeo=false;
+  try{
+    const resp=await fetch('/api/geocode/search?q='+encodeURIComponent(raw)+'&limit=5');
+    const data=await resp.json();
+    if(data.ok&&data.results&&data.results.length){
+      const hit=data.results[0];
+      const gj=hit.geojson;
+      const validGj=gj&&(gj.type==='Polygon'||gj.type==='MultiPolygon')&&gj.coordinates&&gj.coordinates.length;
+      const hasBbox=hit.bbox&&typeof hit.bbox.south==='number';
+      if(validGj||hasBbox){
+        searchMatchedName=hit.display_name||'';
+        searchBBox=hasBbox?hit.bbox:null;
+        searchGeojson=validGj?gj:null;
+        filteredRecords=allRecords.filter(recordInGeoSearch);
+        usedGeo=true;
+        searchMode='geo';
+      }
+    }
+  }catch(_){/* Nominatim unreachable — text fallback */}
+
+  if(!usedGeo){
+    searchMode='text';
+    searchBBox=null;
+    searchGeojson=null;
+    searchMatchedName='';
+    filteredRecords=allRecords.filter(r=>textSearchMatch(r,q));
+  }
+
+  if(btn){btn.disabled=false;btn.textContent=prevLabel;}
 
   const wrap=document.getElementById('searchNoteWrap');
   const note=document.getElementById('searchNote');
   wrap.style.display='block';
   note.style.display='flex';
-  note.innerHTML=`🔍 Showing <b style="margin:0 4px">${filteredRecords.length}</b> result${filteredRecords.length!==1?'s':''} for "<b style="margin:0 4px">${document.getElementById('areaSearch').value.trim()}</b>"
-    &nbsp;<span onclick="clearSearch()" style="cursor:pointer;color:var(--muted)">✕ Clear</span>`;
+  const modeHint=usedGeo
+    ?`<span style="color:var(--muted);font-size:11px;display:block;margin-top:4px">Area from OpenStreetMap (bbox${searchGeojson?' + boundary':''
+    })${searchMatchedName?': '+escapeHtml(searchMatchedName):''}</span>`:'';
+  note.innerHTML=`🔍 Showing <b style="margin:0 4px">${filteredRecords.length}</b> result${filteredRecords.length!==1?'s':''} for "<b style="margin:0 4px">${escapeHtml(raw)}</b>"
+    ${usedGeo?' <span style="color:var(--accent3);font-size:11px">(GPS in area)</span>':' <span style="color:var(--muted);font-size:11px">(text match)</span>'}
+    &nbsp;<span onclick="clearSearch()" style="cursor:pointer;color:var(--muted)">✕ Clear</span>${modeHint}`;
 
-  document.getElementById('tableSubtitle').textContent=`${filteredRecords.length} result${filteredRecords.length!==1?'s':''} for "${document.getElementById('areaSearch').value.trim()}"`;
+  document.getElementById('tableSubtitle').textContent=
+    `${filteredRecords.length} result${filteredRecords.length!==1?'s':''} for "${raw}"`+
+    (usedGeo&&searchMatchedName?' · '+searchMatchedName:'');
   renderStats();
   renderTable();
   refreshMapMarkers();
 }
 
+function escapeHtml(s){
+  const d=document.createElement('div');
+  d.textContent=s;
+  return d.innerHTML;
+}
+
 function clearSearch(){
   searchQuery='';
+  searchMode=null;
+  searchBBox=null;
+  searchGeojson=null;
+  searchMatchedName='';
   filteredRecords=[...allRecords];
   document.getElementById('areaSearch').value='';
   document.getElementById('searchNoteWrap').style.display='none';
@@ -551,8 +664,9 @@ function renderTable(){
   const src=[...filteredRecords].sort((a,b)=>(b.score||1)-(a.score||1));
 
   if(!src.length){
+    const disp=document.getElementById('areaSearch').value.trim()||searchQuery||'';
     tb.innerHTML=`<tr><td colspan="7" style="text-align:center;color:var(--muted);padding:24px;font-size:var(--fs-sm)">
-      ${searchQuery?`No records found for "${searchQuery}"`:'No detections yet. <a href="/" style="color:var(--accent)">Upload →</a>'}
+      ${disp?`No records found for "${escapeHtml(disp)}"`:'No detections yet. <a href="/" style="color:var(--accent)">Upload →</a>'}
     </td></tr>`;
     return;
   }
@@ -566,7 +680,7 @@ function renderTable(){
       ?[...new Set(rec.detections.map(d=>d.class).filter(Boolean))]
       :['Unknown'];
 
-    const locDisplay=placeLabel(rec)||(rec.loc&&rec.loc.trim()?rec.loc.trim():'')||'Unknown location';
+    const locDisplay=placeLabel(rec)||'Unknown location';
     const gpsDisplay=rec.lat!=null&&rec.lng!=null&&rec.lat!==''&&rec.lng!==''
       ?`${parseFloat(rec.lat).toFixed(4)}°N, ${parseFloat(rec.lng).toFixed(4)}°E`
       :'No GPS';
@@ -656,10 +770,13 @@ function buildMarkers(){
 
 function refreshMapMarkers(){
   let toShow=allRecords;
-  if(searchQuery)toShow=toShow.filter(r=>{
-    const hay=((placeLabel(r)||'')+' '+(r.loc||'')).toLowerCase();
-    return hay.includes(searchQuery);
-  });
+  if(searchMode||searchQuery){
+    toShow=toShow.filter(r=>{
+      if(searchMode==='geo')return recordInGeoSearch(r);
+      if(searchMode==='text'&&searchQuery)return textSearchMatch(r,searchQuery);
+      return true;
+    });
+  }
   if(activeFilter)toShow=toShow.filter(r=>sevCat(r.score||1)===activeFilter);
 
   const showIds=new Set(toShow.map(r=>r.id));

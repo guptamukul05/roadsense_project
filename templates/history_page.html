@@ -105,7 +105,7 @@ async function loadHistory(){
   function placeLabel(rec) {
     const p = [rec.city, rec.state].filter(x => x && String(x).trim());
     if (p.length) return p.join(', ');
-    return rec.loc || '';
+    return '';
   }
 
   container.innerHTML='';
