@@ -1,12 +1,12 @@
 """
 RoadSense AI — Flask Backend
 Integrates Model 1 (best.pt) + Model 2 (YOLOv8_Small_2nd_Model.pt)
-Supports: image upload, video upload, live camera stream, history, severity scoring
+Supports: image upload, video upload, client live capture (clustered by GPS), history, severity scoring
 """
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, flash, jsonify, Response, send_from_directory
+    url_for, flash, jsonify, send_from_directory
 )
 import cv2
 import os
@@ -169,6 +169,18 @@ def save_history(entry):
         json.dump(history, f)
 
 
+def save_history_entries_at_front(entries):
+    """Insert many entries at the front (newest first), then cap total at 50."""
+    if not entries:
+        return
+    history = load_history()
+    for entry in entries:
+        history.insert(0, entry)
+    history = history[:50]
+    with open(app.config["HISTORY_FILE"], "w") as f:
+        json.dump(history, f)
+
+
 def resolve_geo_fields(
     lat_in: str,
     lng_in: str,
@@ -245,52 +257,167 @@ def frame_to_b64(frame):
     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 80])
     return base64.b64encode(buf).decode()
 
-# ─── LIVE CAMERA STATE ────────────────────────────────────────
-camera_state = {
-    "running": False,
-    "frame":   None,
-    "lock":    threading.Lock(),
-    "thread":  None,
-    "conf1":   DEFAULT_CONF1,
-    "conf2":   DEFAULT_CONF2,
-    "use_m1":  True,
-    "use_m2":  True,
-}
+# ─── CLIENT LIVE CAPTURE (clustered by location per session) ──
+LIVE_SESSION_TTL_SEC = 600
+live_sessions_lock = threading.Lock()
+live_sessions = {}  # session_id -> {"clusters": dict, "last_seen": float}
 
-def camera_worker():
-    cap = cv2.VideoCapture(0)
-    if not cap.isOpened():
-        camera_state["running"] = False
-        return
-    while camera_state["running"]:
-        ret, frame = cap.read()
-        if not ret:
-            time.sleep(0.05)
-            continue
-        try:
-            ann, _, _ = process_frame(
-                frame,
-                use_m1=camera_state["use_m1"],
-                use_m2=camera_state["use_m2"],
-                conf1=camera_state["conf1"],
-                conf2=camera_state["conf2"],
-            )
-        except:
-            ann = frame
-        with camera_state["lock"]:
-            camera_state["frame"] = ann
-    cap.release()
 
-def gen_camera_stream():
-    while camera_state["running"]:
-        with camera_state["lock"]:
-            frame = camera_state["frame"]
-        if frame is None:
-            time.sleep(0.05)
+def cluster_key_from_lat_lng(lat_f: Optional[float], lng_f: Optional[float]) -> str:
+    if lat_f is None or lng_f is None:
+        return "unknown"
+    return f"{round(lat_f, 4)},{round(lng_f, 4)}"
+
+
+def prune_stale_live_sessions() -> None:
+    now = time.time()
+    with live_sessions_lock:
+        stale = [
+            sid for sid, s in live_sessions.items()
+            if now - s.get("last_seen", 0) > LIVE_SESSION_TTL_SEC
+        ]
+        for sid in stale:
+            live_sessions.pop(sid, None)
+
+
+@app.route("/live/frame", methods=["POST"])
+def live_frame():
+    """One client frame per second: score, keep best per location cluster in RAM."""
+    prune_stale_live_sessions()
+    session_id = (request.form.get("session_id") or "").strip()
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+
+    f = request.files.get("file")
+    if not f or f.filename == "":
+        return jsonify({"error": "No image file"}), 400
+
+    raw_bytes = f.read()
+    if not raw_bytes:
+        return jsonify({"error": "Empty file"}), 400
+
+    arr = np.frombuffer(raw_bytes, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        return jsonify({"error": "Invalid image data"}), 400
+
+    use_m1 = request.form.get("use_m1") == "true"
+    use_m2 = request.form.get("use_m2") == "true"
+    conf1 = float(request.form.get("conf1", DEFAULT_CONF1))
+    conf2 = float(request.form.get("conf2", DEFAULT_CONF2))
+    lat_s = request.form.get("lat", "")
+    lng_s = request.form.get("lng", "")
+    city_form = request.form.get("city", "").strip()
+    state_form = request.form.get("state", "").strip()
+
+    lat_f, lng_f, city, state = resolve_geo_fields(lat_s, lng_s, None, None)
+    city, state = merge_manual_city_state(city, state, city_form, state_form)
+    ck = cluster_key_from_lat_lng(lat_f, lng_f)
+
+    # Avoid a bogus extra history row: frames before GPS/manual coords resolve used to
+    # bucket as "unknown" while later frames used real coords → 2 saves for one stop.
+    if lat_f is None or lng_f is None:
+        return jsonify({
+            "ok": True,
+            "skipped": True,
+            "reason": "no_gps",
+            "cluster_key": ck,
+            "score": None,
+            "is_new_best": False,
+        })
+
+    try:
+        annotated, detections, score = process_frame(img, use_m1, use_m2, conf1, conf2)
+    except Exception:
+        annotated = img.copy()
+        detections = []
+        score = 1
+
+    raw_copy = img.copy()
+    ann_copy = annotated.copy()
+
+    is_new_best = False
+    with live_sessions_lock:
+        if session_id not in live_sessions:
+            live_sessions[session_id] = {"clusters": {}, "last_seen": time.time()}
+        sess = live_sessions[session_id]
+        sess["last_seen"] = time.time()
+        cur = sess["clusters"].get(ck)
+        if cur is None or score >= cur["score"]:
+            sess["clusters"][ck] = {
+                "score": score,
+                "raw": raw_copy,
+                "annotated": ann_copy,
+                "detections": detections,
+                "lat": lat_f,
+                "lng": lng_f,
+                "city": city,
+                "state": state,
+            }
+            is_new_best = True
+
+    return jsonify({
+        "ok": True,
+        "cluster_key": ck,
+        "score": score,
+        "is_new_best": is_new_best,
+    })
+
+
+@app.route("/live/session/flush", methods=["POST"])
+def live_session_flush():
+    """Persist best frame per cluster to disk + history, then drop session."""
+    data = request.get_json(silent=True) or {}
+    session_id = (data.get("session_id") or "").strip()
+    if not session_id:
+        return jsonify({"error": "session_id required"}), 400
+
+    with live_sessions_lock:
+        sess = live_sessions.pop(session_id, None)
+
+    if not sess or not sess.get("clusters"):
+        return jsonify({"ok": True, "saved": 0, "entry_ids": []})
+
+    entries = []
+    entry_ids = []
+    cluster_keys_persisted = []
+    for ck in sorted(sess["clusters"].keys()):
+        if ck == "unknown":
             continue
-        _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
-        yield (b"--frame\r\nContent-Type: image/jpeg\r\n\r\n" + buf.tobytes() + b"\r\n")
-        time.sleep(0.04)
+        w = sess["clusters"][ck]
+        fname = f"{uuid.uuid4().hex}.jpg"
+        fpath = os.path.join(app.config["UPLOAD_FOLDER"], fname)
+        rname = f"result_{uuid.uuid4().hex}.jpg"
+        rpath = os.path.join(app.config["RESULT_FOLDER"], rname)
+        cv2.imwrite(fpath, w["raw"])
+        cv2.imwrite(rpath, w["annotated"])
+        eid = uuid.uuid4().hex[:8]
+        entry = {
+            "id": eid,
+            "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "type": "image",
+            "original": fname,
+            "result": rname,
+            "detections": w["detections"],
+            "score": w["score"],
+            "severity": severity_label(w["score"]),
+            "lat": w["lat"],
+            "lng": w["lng"],
+            "city": w["city"],
+            "state": w["state"],
+        }
+        entries.append(entry)
+        entry_ids.append(eid)
+        cluster_keys_persisted.append(ck)
+
+    save_history_entries_at_front(entries)
+    return jsonify({
+        "ok": True,
+        "saved": len(entries),
+        "entry_ids": entry_ids,
+        "cluster_keys": cluster_keys_persisted,
+    })
+
 
 # ─── ROUTES ───────────────────────────────────────────────────
 
@@ -616,31 +743,6 @@ def detect_video():
             except OSError:
                 pass
 
-# ── LIVE CAMERA ──
-@app.route("/camera/start", methods=["POST"])
-def camera_start():
-    data = request.get_json(silent=True) or {}
-    camera_state["conf1"]  = float(data.get("conf1", DEFAULT_CONF1))
-    camera_state["conf2"]  = float(data.get("conf2", DEFAULT_CONF2))
-    camera_state["use_m1"] = data.get("use_m1", True)
-    camera_state["use_m2"] = data.get("use_m2", True)
-    if not camera_state["running"]:
-        camera_state["running"] = True
-        t = threading.Thread(target=camera_worker, daemon=True)
-        camera_state["thread"] = t
-        t.start()
-    return jsonify({"status": "started"})
-
-@app.route("/camera/stop", methods=["POST"])
-def camera_stop():
-    camera_state["running"] = False
-    return jsonify({"status": "stopped"})
-
-@app.route("/camera/stream")
-def camera_stream():
-    return Response(gen_camera_stream(),
-                    mimetype="multipart/x-mixed-replace; boundary=frame")
-
 # ── HISTORY ──
 @app.route("/history")
 def history():
@@ -664,10 +766,12 @@ def history_page():
 
 @app.route("/status")
 def status():
+    with live_sessions_lock:
+        n_live = len(live_sessions)
     return jsonify({
         "model1": model1 is not None,
         "model2": model2 is not None,
-        "camera": camera_state["running"],
+        "live_sessions": n_live,
     })
 
 if __name__ == "__main__":

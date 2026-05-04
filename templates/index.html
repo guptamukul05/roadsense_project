@@ -128,6 +128,8 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .camera-area{border-radius:11px;overflow:hidden;border:1px solid var(--border);
   background:var(--surface2);display:none;position:relative;min-height:180px}
 .camera-area img{width:100%;display:block;max-height:260px;object-fit:cover}
+.camera-area video{width:100%;display:none;max-height:260px;object-fit:cover}
+#liveCapCanvas{display:none}
 .cam-placeholder{display:flex;align-items:center;justify-content:center;
   flex-direction:column;gap:10px;min-height:180px;color:var(--muted)}
 .cam-icon-big{font-size:2.2rem;opacity:.35}
@@ -391,9 +393,10 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
           <div class="camera-area" id="cameraArea" style="display:block">
             <div class="cam-placeholder" id="camPH">
               <div class="cam-icon-big">📷</div>
-              <div style="font-size:var(--fs-sm);color:var(--muted);font-family:'Space Mono'">Click Start to open camera</div>
+              <div style="font-size:var(--fs-sm);color:var(--muted);font-family:'Space Mono'">Start — 1 frame/sec while live. On stop we save <b>one best shot per GPS area</b> (not every second).</div>
             </div>
-            <img id="cameraFeed" src="" style="display:none;width:100%;max-height:260px;object-fit:cover"/>
+            <video id="liveCapVideo" playsinline muted autoplay style="display:none;width:100%;max-height:260px;object-fit:cover"></video>
+            <canvas id="liveCapCanvas" width="640" height="480"></canvas>
             <div class="cam-status" id="camStatus">● OFFLINE</div>
           </div>
           <button class="run-btn cam-start-btn" id="startCamBtn" onclick="startCamera()" style="margin-top:13px">📷 Start Live Camera</button>
@@ -628,6 +631,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 // ── MODE SWITCHING ─────────────────────────────────────────────
 let currentMode='image';
 function setMode(m){
+  if(currentMode==='camera'&&m!=='camera')void stopLiveCapture(true);
   currentMode=m;
   ['image','video','camera'].forEach(x=>{
     document.getElementById('mode-'+x).style.display=x===m?'block':'none';
@@ -968,35 +972,148 @@ async function runDetection(type){
   document.getElementById(btnId).disabled=false;
 }
 
-// ── LIVE CAMERA ────────────────────────────────────────────────
-async function startCamera(){
-  const useM1=document.getElementById('useM1').checked;
-  const useM2=document.getElementById('useM2').checked;
-  await fetch('/camera/start',{method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({use_m1:useM1,use_m2:useM2,
-      conf1:parseFloat(document.getElementById('conf1').value),
-      conf2:parseFloat(document.getElementById('conf2').value)})});
-  document.getElementById('camPH').style.display='none';
-  const feed=document.getElementById('cameraFeed');
-  feed.style.display='block';feed.src='/camera/stream?t='+Date.now();
-  document.getElementById('camStatus').textContent='● LIVE';
-  document.getElementById('camStatus').className='cam-status live';
-  document.getElementById('startCamBtn').style.display='none';
-  document.getElementById('stopCamBtn').style.display='flex';
+// ── LIVE CAMERA (client getUserMedia + 1 fps /live/frame, flush on stop) ──
+let liveSessionId=null,liveTickTimer=null,liveVideoStream=null,liveGeoWatchId=null;
+
+function liveCanvasToBlob(canvas,q){
+  return new Promise((res,rej)=>{
+    canvas.toBlob(b=>{if(b)res(b);else rej(new Error('JPEG encode failed'));},'image/jpeg',q);
+  });
 }
-async function stopCamera(){
-  await fetch('/camera/stop',{method:'POST'});
-  document.getElementById('cameraFeed').src='';
-  document.getElementById('cameraFeed').style.display='none';
+
+async function tickLiveFrame(){
+  if(!liveSessionId||!liveVideoStream)return;
+  const v=document.getElementById('liveCapVideo');
+  const c=document.getElementById('liveCapCanvas');
+  if(!v.videoWidth)return;
+  c.width=v.videoWidth;c.height=v.videoHeight;
+  c.getContext('2d').drawImage(v,0,0);
+  try{
+    const blob=await liveCanvasToBlob(c,0.88);
+    const fd=new FormData();
+    fd.append('file',blob,'frame.jpg');
+    fd.append('session_id',liveSessionId);
+    fd.append('lat',document.getElementById('lat').value||'');
+    fd.append('lng',document.getElementById('lng').value||'');
+    fd.append('city',document.getElementById('city').value||'');
+    fd.append('state',document.getElementById('state').value||'');
+    fd.append('use_m1',String(document.getElementById('useM1').checked));
+    fd.append('use_m2',String(document.getElementById('useM2').checked));
+    fd.append('conf1',String(document.getElementById('conf1').value));
+    fd.append('conf2',String(document.getElementById('conf2').value));
+    const r=await fetch('/live/frame',{method:'POST',body:fd});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)throw new Error(j.error||r.statusText);
+    const st=document.getElementById('camStatus');
+    if(j.skipped){
+      st.textContent='● LIVE · need lat/lng (GPS or manual) before frames count';
+      st.className='cam-status live';
+      return;
+    }
+    st.textContent='● LIVE · score '+j.score+(j.is_new_best?' · best@this area':'');
+    st.className='cam-status live';
+  }catch(e){
+    console.error('live frame',e);
+    const st=document.getElementById('camStatus');
+    st.textContent='● LIVE (send error)';
+    st.className='cam-status live';
+  }
+}
+
+async function stopLiveCapture(fromTabSwitch){
+  const sid=liveSessionId;
+  if(liveTickTimer){clearInterval(liveTickTimer);liveTickTimer=null;}
+  if(liveGeoWatchId!=null){
+    try{navigator.geolocation.clearWatch(liveGeoWatchId);}catch(_e){}
+    liveGeoWatchId=null;
+  }
+  const v=document.getElementById('liveCapVideo');
+  if(liveVideoStream){
+    liveVideoStream.getTracks().forEach(t=>t.stop());
+    liveVideoStream=null;
+  }
+  v.srcObject=null;
+  v.style.display='none';
   document.getElementById('camPH').style.display='flex';
   document.getElementById('camStatus').textContent='● OFFLINE';
   document.getElementById('camStatus').className='cam-status';
   document.getElementById('startCamBtn').style.display='flex';
   document.getElementById('stopCamBtn').style.display='none';
+  liveSessionId=null;
+  if(sid){
+    try{
+      const r=await fetch('/live/session/flush',{method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({session_id:sid})});
+      const j=await r.json().catch(()=>({}));
+      if(!fromTabSwitch){
+        if(!r.ok)alert(j.error||'Could not save session');
+        else if(j.saved>0){
+          const keys=(j.cluster_keys||[]).join(' · ');
+          alert('Saved '+j.saved+' best frame(s) per location.'+(keys?'\nClusters: '+keys:''));
+        }else alert('Nothing saved — no frames with valid lat/lng reached the server, or no location buckets.');
+      }
+    }catch(err){if(!fromTabSwitch)alert('Flush failed: '+err.message);}
+  }
 }
+
+async function startCamera(){
+  if(liveSessionId)return;
+  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
+    alert('Camera API not available in this browser.');
+    return;
+  }
+  try{
+    liveSessionId=(crypto.randomUUID&&crypto.randomUUID())||
+      ('s'+Date.now()+Math.random().toString(16).slice(2));
+    const stream=await navigator.mediaDevices.getUserMedia({
+      video:{facingMode:{ideal:'environment'}},audio:false});
+    liveVideoStream=stream;
+    const v=document.getElementById('liveCapVideo');
+    v.srcObject=stream;
+    await v.play().catch(()=>{});
+    if(navigator.geolocation){
+      liveGeoWatchId=navigator.geolocation.watchPosition(
+        pos=>{
+          document.getElementById('lat').value=String(pos.coords.latitude);
+          document.getElementById('lng').value=String(pos.coords.longitude);
+          refreshLocationDisplay();
+          updateCoords();
+        },
+        ()=>{},
+        {enableHighAccuracy:true,maximumAge:2000,timeout:15000}
+      );
+    }
+    document.getElementById('camPH').style.display='none';
+    v.style.display='block';
+    document.getElementById('camStatus').textContent='● LIVE';
+    document.getElementById('camStatus').className='cam-status live';
+    document.getElementById('startCamBtn').style.display='none';
+    document.getElementById('stopCamBtn').style.display='flex';
+    liveTickTimer=setInterval(()=>{void tickLiveFrame();},1000);
+    void tickLiveFrame();
+  }catch(err){
+    if(liveGeoWatchId!=null){
+      try{navigator.geolocation.clearWatch(liveGeoWatchId);}catch(_e){}
+      liveGeoWatchId=null;
+    }
+    if(liveTickTimer){clearInterval(liveTickTimer);liveTickTimer=null;}
+    if(liveVideoStream){
+      liveVideoStream.getTracks().forEach(t=>t.stop());
+      liveVideoStream=null;
+    }
+    const vid=document.getElementById('liveCapVideo');
+    vid.srcObject=null;vid.style.display='none';
+    document.getElementById('camPH').style.display='flex';
+    liveSessionId=null;
+    alert('Camera not available: '+err.message);
+  }
+}
+
+async function stopCamera(){await stopLiveCapture(false);}
 
 // ── RESET ──────────────────────────────────────────────────────
 function resetAll(){
+  void stopLiveCapture(true);
   document.getElementById('loadingWrap').style.display='none';
   document.getElementById('resWrap').style.display='none';
   mediaPickGeneration++;
