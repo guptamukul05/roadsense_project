@@ -756,16 +756,36 @@ function clearLocationFields(){
   refreshLocationDisplay();
   updateCoords();
 }
+const REVERSE_GEO_DEBOUNCE_MS=500;
+let _reverseGeoTimer=null;
+function _coordsStillMatchRequest(reqLat,reqLng){
+  const la=parseFloat(document.getElementById('lat').value);
+  const lo=parseFloat(document.getElementById('lng').value);
+  if(isNaN(la)||isNaN(lo))return false;
+  return Math.abs(la-reqLat)<1e-5&&Math.abs(lo-reqLng)<1e-5;
+}
 async function reverseFillCityState(lat,lng){
+  const reqLat=Number(lat),reqLng=Number(lng);
   try{
     const r=await fetch('/api/geocode/reverse',{method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({lat,lon:lng})});
+      body:JSON.stringify({lat:reqLat,lon:reqLng})});
     if(!r.ok)return;
     const j=await r.json();
+    if(!_coordsStillMatchRequest(reqLat,reqLng))return;
     document.getElementById('city').value=j.city||'';
     document.getElementById('state').value=j.state||'';
     refreshLocationDisplay();
+    updateCoords();
   }catch(_){/* ignore */}
+}
+function scheduleReverseFromTypedCoords(){
+  if(_reverseGeoTimer)clearTimeout(_reverseGeoTimer);
+  _reverseGeoTimer=setTimeout(()=>{
+    _reverseGeoTimer=null;
+    const lat=parseFloat(document.getElementById('lat').value);
+    const lng=parseFloat(document.getElementById('lng').value);
+    if(!isNaN(lat)&&!isNaN(lng))reverseFillCityState(lat,lng);
+  },REVERSE_GEO_DEBOUNCE_MS);
 }
 function autoGPS(){
   if(!navigator.geolocation){alert('Geolocation not supported in this browser.');return;}
@@ -817,6 +837,7 @@ function updateCoords(){
 }
 function onLatLngInput(){
   updateCoords();
+  scheduleReverseFromTypedCoords();
 }
 function onCityStateInput(){
   refreshLocationDisplay();
