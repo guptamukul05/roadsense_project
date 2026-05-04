@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>RoadSense AI — History</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
 <style>
 :root{--bg:#050a12;--surface:#0b1523;--surface2:#0f1e30;--border:rgba(0,210,255,0.12);--accent:#00d2ff;--accent2:#ff6b35;--accent3:#7fff6b;--warn:#ffcc00;--danger:#ff4444;--text:#e8f4fd;--muted:#5a7a9a;--card:rgba(11,21,35,0.9);}
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
@@ -13,13 +13,13 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 .grid-overlay{position:fixed;inset:0;z-index:0;pointer-events:none;background-image:linear-gradient(rgba(0,210,255,0.025) 1px,transparent 1px),linear-gradient(90deg,rgba(0,210,255,0.025) 1px,transparent 1px);background-size:50px 50px}
 .wrapper{position:relative;z-index:1}
 .topbar{display:flex;align-items:center;justify-content:space-between;padding:16px 36px;border-bottom:1px solid var(--border);background:rgba(5,10,18,.85);backdrop-filter:blur(20px);position:sticky;top:0;z-index:100}
-.logo{display:flex;align-items:center;gap:10px;font-family:'Syne',sans-serif;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
+.logo{display:flex;align-items:center;gap:10px;font-family:'Inter',sans-serif;font-weight:800;font-size:1.25rem;letter-spacing:-.5px}
 .logo-icon{width:36px;height:36px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);display:flex;align-items:center;justify-content:center;font-size:1rem;box-shadow:0 0 18px rgba(0,210,255,.4)}
 .logo span{color:var(--accent)}
 .nav-btn{padding:8px 18px;border-radius:8px;border:1px solid var(--border);font-size:.83rem;font-weight:500;color:var(--muted);background:transparent;cursor:pointer;transition:all .2s;text-decoration:none;display:inline-block}
 .nav-btn:hover,.nav-btn.active{color:var(--accent);border-color:var(--accent);background:rgba(0,210,255,.06)}
 .page-header{padding:28px 36px 20px;display:flex;align-items:center;justify-content:space-between}
-.page-title{font-family:'Syne',sans-serif;font-size:1.9rem;font-weight:800;letter-spacing:-1px}
+.page-title{font-family:'Inter',sans-serif;font-size:1.9rem;font-weight:800;letter-spacing:-1px}
 .page-title span{color:var(--accent)}
 .clear-btn{padding:8px 16px;border-radius:9px;border:1px solid rgba(255,68,68,.3);background:rgba(255,68,68,.08);color:var(--danger);font-size:.8rem;cursor:pointer;font-family:'DM Sans';transition:all .2s}
 .clear-btn:hover{background:rgba(255,68,68,.15);border-color:var(--danger)}
@@ -45,7 +45,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 .empty-state{text-align:center;padding:80px 36px;color:var(--muted)}
 .empty-icon{font-size:3rem;margin-bottom:16px;opacity:.4}
-.empty-title{font-family:'Syne',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:8px;color:var(--text)}
+.empty-title{font-family:'Inter',sans-serif;font-size:1.2rem;font-weight:700;margin-bottom:8px;color:var(--text)}
 .empty-sub{font-size:.85rem;line-height:1.6}
 
 .fade-up{opacity:0;transform:translateY(18px);animation:fadeUp .5s ease forwards}
@@ -97,7 +97,7 @@ async function loadHistory(){
         <div class="empty-icon">🕐</div>
         <div class="empty-title">No detection history yet</div>
         <div class="empty-sub">Upload an image or video to start detecting road anomalies.<br>Results will appear here automatically.</div>
-        <a href="/" style="display:inline-block;margin-top:18px;padding:10px 22px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;font-family:'Syne';font-weight:700;text-decoration:none;font-size:.88rem">📤 Upload Now</a>
+        <a href="/" style="display:inline-block;margin-top:18px;padding:10px 22px;border-radius:9px;background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;font-family:'Inter';font-weight:700;text-decoration:none;font-size:.88rem">📤 Upload Now</a>
       </div>`);
     return;
   }

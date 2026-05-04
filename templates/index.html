@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>RoadSense AI — Upload & Detect</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -38,7 +38,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
   background:rgba(5,10,18,.88);backdrop-filter:blur(22px);
   position:sticky;top:0;z-index:100}
 .logo{display:flex;align-items:center;gap:10px;
-  font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.5px}
+  font-family:'Inter',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.5px}
 .logo-icon{width:34px;height:34px;border-radius:9px;
   background:linear-gradient(135deg,var(--accent),#0080ff);
   display:flex;align-items:center;justify-content:center;font-size:.95rem;
@@ -62,7 +62,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
   background:rgba(0,210,255,.08);border:1px solid rgba(0,210,255,.2);
   border-radius:50px;padding:4px 15px;font-size:var(--fs-xs);
   font-family:'Space Mono',monospace;color:var(--accent);margin-bottom:13px}
-.hero-title{font-family:'Syne',sans-serif;font-size:clamp(1.8rem,3vw,2.7rem);
+.hero-title{font-family:'Inter',sans-serif;font-size:clamp(1.8rem,3vw,2.7rem);
   font-weight:800;line-height:1.06;letter-spacing:-1.5px;margin-bottom:10px}
 .hero-title .hl{color:var(--accent)}
 .hero-sub{font-size:var(--fs-sm);color:var(--muted);max-width:500px;line-height:1.72}
@@ -79,7 +79,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .card-icon{width:32px;height:32px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;font-size:.85rem;background:rgba(0,210,255,.1);
   color:var(--accent);border:1px solid rgba(0,210,255,.2);flex-shrink:0}
-.card-title{font-family:'Syne',sans-serif;font-size:var(--fs-base);font-weight:700}
+.card-title{font-family:'Inter',sans-serif;font-size:var(--fs-base);font-weight:700}
 .card-sub{font-size:var(--fs-xs);color:var(--muted);margin-top:1px}
 
 /* ── MODE TABS ── */
@@ -103,7 +103,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
   font-size:1.55rem;border:1px solid rgba(0,210,255,.2);
   box-shadow:0 0 20px rgba(0,210,255,.2);animation:iconFloat 3s ease-in-out infinite}
 @keyframes iconFloat{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
-.upload-title{font-family:'Syne',sans-serif;font-weight:700;font-size:var(--fs-lg);margin-bottom:6px}
+.upload-title{font-family:'Inter',sans-serif;font-weight:700;font-size:var(--fs-lg);margin-bottom:6px}
 .upload-sub{font-size:var(--fs-sm);color:var(--muted);line-height:1.65}
 .upload-types{display:flex;gap:6px;justify-content:center;margin-top:12px;flex-wrap:wrap}
 .type-badge{font-family:'Space Mono',monospace;font-size:var(--fs-xs);
@@ -190,7 +190,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 /* ── RUN BTN ── */
 .run-btn{width:100%;padding:15px;border-radius:12px;border:none;
   background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;
-  font-family:'Syne';font-weight:800;font-size:var(--fs-base);cursor:pointer;
+  font-family:'Inter';font-weight:800;font-size:var(--fs-base);cursor:pointer;
   position:relative;overflow:hidden;margin-top:15px;transition:all .3s;
   box-shadow:0 4px 24px rgba(0,210,255,.3);
   display:flex;align-items:center;justify-content:center;gap:7px}
@@ -250,7 +250,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .btn-o:hover{border-color:var(--accent);color:var(--accent);background:rgba(0,210,255,.05)}
 .btn-p{flex:1.4;padding:10px;border-radius:9px;border:none;
   background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;
-  font-family:'Syne';font-weight:700;font-size:var(--fs-sm);cursor:pointer;transition:all .2s;
+  font-family:'Inter';font-weight:700;font-size:var(--fs-sm);cursor:pointer;transition:all .2s;
   display:flex;align-items:center;justify-content:center;gap:5px;text-decoration:none}
 .btn-p:hover{transform:translateY(-1px);box-shadow:0 5px 20px rgba(0,210,255,.35)}
 
@@ -312,7 +312,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
       Road<span>Sense</span> AI
     </div>
     <div class="nav-links">
-      <div class="model-status-pill"><div class="pulse-dot"></div>AI READY</div>
       <a href="/" class="nav-btn active">📤 Upload</a>
       <a href="/analytics" class="nav-btn">📊 Municipality</a>
       <a href="/history_page" class="nav-btn">🕐 History</a>
@@ -458,10 +457,6 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
         <div class="tog-row">
           <div><div class="tog-name">Save to History</div><div class="tog-desc">Store results for analytics</div></div>
           <div class="tog on" onclick="this.classList.toggle('on')"></div>
-        </div>
-        <div class="tog-row">
-          <div><div class="tog-name">Generate PDF Report</div><div class="tog-desc">Downloadable after detection</div></div>
-          <div class="tog" onclick="this.classList.toggle('on')"></div>
         </div>
       </div>
 

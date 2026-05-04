@@ -4,7 +4,7 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
 <title>RoadSense AI — Municipality Dashboard</title>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:ital,wght@0,300;0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <style>
@@ -35,7 +35,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
   background:rgba(5,10,18,.88);backdrop-filter:blur(22px);
   position:sticky;top:0;z-index:100}
 .logo{display:flex;align-items:center;gap:10px;
-  font-family:'Syne',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.5px}
+  font-family:'Inter',sans-serif;font-weight:800;font-size:1.2rem;letter-spacing:-.5px}
 .logo-icon{width:34px;height:34px;border-radius:9px;
   background:linear-gradient(135deg,var(--accent),#0080ff);
   display:flex;align-items:center;justify-content:center;font-size:.95rem;
@@ -48,14 +48,14 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 
 /* ── PAGE HEADER ── */
 .page-header{padding:26px 36px 6px}
-.page-title{font-family:'Syne',sans-serif;font-size:clamp(1.6rem,2.5vw,2rem);
+.page-title{font-family:'Inter',sans-serif;font-size:clamp(1.6rem,2.5vw,2rem);
   font-weight:800;letter-spacing:-.8px;margin-bottom:4px}
 .page-title span{color:var(--accent)}
 .page-sub{font-size:var(--fs-sm);color:var(--muted)}
 
 /* ── SECTION ── */
 .section{padding:14px 36px}
-.sec-title{font-family:'Syne',sans-serif;font-size:.78rem;font-weight:700;
+.sec-title{font-family:'Inter',sans-serif;font-size:.78rem;font-weight:700;
   text-transform:uppercase;letter-spacing:1px;color:var(--muted);
   margin-bottom:13px;display:flex;align-items:center;gap:8px}
 .sec-title::after{content:'';flex:1;height:1px;background:var(--border)}
@@ -69,7 +69,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .card-icon{width:31px;height:31px;border-radius:8px;display:flex;align-items:center;
   justify-content:center;font-size:.82rem;background:rgba(0,210,255,.1);
   color:var(--accent);border:1px solid rgba(0,210,255,.2);flex-shrink:0}
-.card-title{font-family:'Syne',sans-serif;font-size:var(--fs-base);font-weight:700}
+.card-title{font-family:'Inter',sans-serif;font-size:var(--fs-base);font-weight:700}
 .card-sub{font-size:var(--fs-xs);color:var(--muted);margin-top:1px}
 
 /* ── SEARCH BAR ── */
@@ -82,7 +82,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .search-input::placeholder{color:var(--muted)}
 .search-btn{padding:10px 20px;border-radius:10px;border:none;
   background:linear-gradient(135deg,var(--accent),#0080ff);color:#050a12;
-  font-family:'Syne';font-weight:700;font-size:var(--fs-sm);cursor:pointer;
+  font-family:'Inter';font-weight:700;font-size:var(--fs-sm);cursor:pointer;
   transition:all .2s;white-space:nowrap}
 .search-btn:hover{transform:translateY(-1px);box-shadow:0 5px 18px rgba(0,210,255,.35)}
 .search-clear{padding:10px 16px;border-radius:10px;border:1px solid var(--border);
@@ -124,7 +124,7 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
 .sev-legend-card.active-filter{transform:translateY(-2px)}
 .sev-legend-card:hover{transform:translateY(-2px)}
 .sev-card-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-.sev-num-big{font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:800;line-height:1}
+.sev-num-big{font-family:'Inter',sans-serif;font-size:1.35rem;font-weight:800;line-height:1}
 .sev-name-txt{font-size:var(--fs-sm);font-weight:700}
 .sev-count-badge{font-family:'Space Mono';font-size:var(--fs-xs);font-weight:700;
   padding:2px 8px;border-radius:5px;background:rgba(0,0,0,.25)}
@@ -242,25 +242,6 @@ tr:hover td{background:rgba(0,210,255,.02)}
     </div>
   </div>
 
-  <!-- STATS ROW -->
-  <div class="section" style="padding-bottom:0">
-    <div class="sec-title">📊 Overview</div>
-  </div>
-  <div class="stats-row fade-up d1">
-    <div class="stat-box">
-      <div class="stat-val" id="cTotal" style="color:var(--danger)">—</div>
-      <div class="stat-lbl">Total Anomalies</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-val" id="cCrit" style="color:var(--danger)">—</div>
-      <div class="stat-lbl">Critical (9–10)</div>
-    </div>
-    <div class="stat-box">
-      <div class="stat-val" id="cPending" style="color:var(--warn)">—</div>
-      <div class="stat-lbl">Pending Repair</div>
-    </div>
-  </div>
-
   <!-- MAP + SEVERITY FILTER -->
   <div class="section" style="margin-top:18px">
     <div class="sec-title">📍 GPS Anomaly Map &amp; Severity Filter</div>
@@ -287,7 +268,7 @@ tr:hover td{background:rgba(0,210,255,.02)}
 
       <!-- SEVERITY LEGEND (interactive filter) -->
       <div class="fade-up d2" style="display:flex;flex-direction:column;gap:0">
-        <div style="font-family:'Syne',sans-serif;font-size:.78rem;font-weight:700;
+        <div style="font-family:'Inter',sans-serif;font-size:.78rem;font-weight:700;
           text-transform:uppercase;letter-spacing:1px;color:var(--muted);margin-bottom:11px;
           display:flex;align-items:center;justify-content:space-between">
           <span>🎯 Severity Scale — click to filter map</span>
@@ -396,28 +377,6 @@ tr:hover td{background:rgba(0,210,255,.02)}
     </div>
   </div>
 
-  <!-- BOTTOM STATS -->
-  <div class="section" style="padding-bottom:0">
-    <div class="sec-title">🔧 Repair Status</div>
-  </div>
-  <div class="bottom-stats fade-up d3" style="margin-bottom:36px">
-    <div class="bstat">
-      <div class="bstat-emoji">✅</div>
-      <div class="bstat-val" id="bRepaired" style="color:var(--accent3)">0</div>
-      <div class="bstat-lbl">Repaired</div>
-    </div>
-    <div class="bstat">
-      <div class="bstat-emoji">🔵</div>
-      <div class="bstat-val" id="bApproved" style="color:var(--accent)">0</div>
-      <div class="bstat-lbl">Approved / In Progress</div>
-    </div>
-    <div class="bstat">
-      <div class="bstat-emoji">⏳</div>
-      <div class="bstat-val" id="bPending" style="color:var(--warn)">0</div>
-      <div class="bstat-lbl">Awaiting Action</div>
-    </div>
-  </div>
-
 </div><!-- /wrapper -->
 
 <script>
@@ -438,6 +397,7 @@ const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
 const sevCat   = s => s>=9?'crit':s>=7?'high':s>=4?'med':'low';
 const sevChipCls = s => s>=9?'sc-crit':s>=7?'sc-high':s>=4?'sc-med':'sc-low';
 function placeLabel(rec) {
+  if (rec.loc && String(rec.loc).trim()) return String(rec.loc).trim();
   const p = [rec.city, rec.state].filter(x => x && String(x).trim());
   if (p.length) return p.join(', ');
   return '';
@@ -454,25 +414,16 @@ async function loadData(){
 }
 
 function renderAll(){
-  const count=filteredRecords.length;
   const total=allRecords.length;
   document.getElementById('pageSubtitle').textContent=
     total?`${total} anomaly record${total!==1?'s':''} · all GPS-tagged locations`
          :'No anomalies detected yet — upload images or video to begin';
-  renderStats();
   renderSevCounts();
   renderTable();
   renderMap();
-  renderBottomStats();
 }
 
-// ── STATS ─────────────────────────────────────────────────────
-function renderStats(){
-  const src=filteredRecords;
-  document.getElementById('cTotal').textContent=src.length;
-  document.getElementById('cCrit').textContent=src.filter(r=>(r.score||1)>=9).length;
-  document.getElementById('cPending').textContent=src.length; // all pending until status set
-}
+// ── STATS (removed - Overview section deleted) ────────────────
 
 function renderSevCounts(){
   ['crit','high','med','low'].forEach(cat=>{
@@ -633,7 +584,6 @@ async function searchArea(){
   document.getElementById('tableSubtitle').textContent=
     `${filteredRecords.length} result${filteredRecords.length!==1?'s':''} for "${raw}"`+
     (usedGeo&&searchMatchedName?' · '+searchMatchedName:'');
-  renderStats();
   renderTable();
   refreshMapMarkers();
 }
@@ -655,7 +605,7 @@ function clearSearch(){
   document.getElementById('searchNoteWrap').style.display='none';
   document.getElementById('searchNote').style.display='none';
   document.getElementById('tableSubtitle').textContent='All records · sorted by severity';
-  renderStats();renderTable();refreshMapMarkers();
+  renderTable();refreshMapMarkers();
 }
 
 // ── TABLE ─────────────────────────────────────────────────────
@@ -813,13 +763,7 @@ function updatePinCount(n){
   document.getElementById('pinCountLabel').textContent=`${count} pin${count!==1?'s':''}`;
 }
 
-// ── BOTTOM STATS ──────────────────────────────────────────────
-function renderBottomStats(){
-  // In production these come from DB. For now all start pending.
-  document.getElementById('bRepaired').textContent=0;
-  document.getElementById('bApproved').textContent=0;
-  document.getElementById('bPending').textContent=filteredRecords.length;
-}
+// ── BOTTOM STATS (removed - Repair Status section deleted) ───
 
 // ── INIT ──────────────────────────────────────────────────────
 loadData();
