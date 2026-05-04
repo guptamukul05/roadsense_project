@@ -31,6 +31,7 @@ from location_utils import (
     extract_gps_from_image_path,
     extract_gps_from_video_path,
     extract_gps_from_upload,
+    forward_geocode_search,
     reverse_geocode,
 )
 
@@ -325,6 +326,23 @@ def api_geocode_reverse():
         "city": geo.get("city") or "",
         "state": geo.get("state") or "",
     })
+
+
+@app.route("/api/geocode/search")
+def api_geocode_search():
+    """
+    Forward geocode a place name via Nominatim (same stack as reverse geocode).
+    Returns bbox + optional GeoJSON polygon for area-based filtering.
+    """
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"ok": False, "error": "Query too short", "results": []}), 400
+    try:
+        lim = int(request.args.get("limit", "5"))
+    except ValueError:
+        lim = 5
+    data = forward_geocode_search(q, limit=lim)
+    return jsonify(data)
 
 
 @app.route("/detect/location", methods=["POST"])
