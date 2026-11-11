@@ -50,6 +50,22 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
 .fade-up{opacity:0;transform:translateY(18px);animation:fadeUp .5s ease forwards}
 @keyframes fadeUp{to{opacity:1;transform:translateY(0)}}
+
+.h-card.clickable{cursor:pointer}
+.h-card.clickable:active{transform:translateY(0) scale(0.98)}
+
+.video-overlay{position:absolute;top:0;left:0;width:100%;height:160px;background:rgba(0,0,0,0.4);display:flex;align-items:center;justify-content:center;font-size:3rem;opacity:0;transition:opacity .3s}
+.h-card.clickable:hover .video-overlay{opacity:1}
+
+.modal{display:none;position:fixed;z-index:1000;inset:0;background:rgba(0,0,0,0.85);align-items:center;justify-content:center}
+.modal.open{display:flex}
+.modal-content{background:var(--surface);border:1px solid var(--border);border-radius:16px;max-width:90vw;max-height:90vh;overflow:hidden;display:flex;flex-direction:column}
+.modal-header{padding:16px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:center}
+.modal-close{background:none;border:none;font-size:1.5rem;cursor:pointer;color:var(--muted);transition:color .2s}
+.modal-close:hover{color:var(--accent)}
+.modal-body{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;background:var(--bg);min-height:300px}
+.modal-body video{max-width:100%;max-height:100%;object-fit:contain}
+.modal-body img{max-width:100%;max-height:100%;object-fit:contain}
 </style>
 </head>
 <body>
@@ -76,11 +92,56 @@ body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min
 
   <div id="historyContainer" class="history-grid"></div>
 
+  <div id="mediaModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div id="modalTitle" style="font-weight:600;font-size:1rem">Media Viewer</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <video id="modalVideo" style="display:none" controls></video>
+        <img id="modalImage" style="display:none" alt="Detection result"/>
+      </div>
+    </div>
+  </div>
+
 </div>
 
 <script>
 const sevColor = s => s>=9?'#ff4444':s>=7?'#ff6b35':s>=4?'#ffcc00':'#7fff6b';
 const sevLabel = s => s>=9?'CRITICAL':s>=7?'HIGH':s>=4?'MEDIUM':'LOW';
+
+function openModal(mediaType, mediaSrc, title) {
+  const modal = document.getElementById('mediaModal');
+  const videoEl = document.getElementById('modalVideo');
+  const imageEl = document.getElementById('modalImage');
+  
+  videoEl.style.display = 'none';
+  imageEl.style.display = 'none';
+  
+  document.getElementById('modalTitle').textContent = title || 'Media Viewer';
+  
+  if (mediaType === 'video') {
+    videoEl.src = mediaSrc;
+    videoEl.style.display = 'block';
+  } else {
+    imageEl.src = mediaSrc;
+    imageEl.style.display = 'block';
+  }
+  
+  modal.classList.add('open');
+}
+
+function closeModal() {
+  const modal = document.getElementById('mediaModal');
+  const videoEl = document.getElementById('modalVideo');
+  videoEl.pause();
+  modal.classList.remove('open');
+}
+
+document.getElementById('mediaModal').addEventListener('click', (e) => {
+  if (e.target.id === 'mediaModal') closeModal();
+});
 
 async function loadHistory(){
   const r = await fetch('/history');
@@ -116,17 +177,34 @@ async function loadHistory(){
     const mainDet = rec.detections && rec.detections[0];
     const allTypes = rec.detections ? [...new Set(rec.detections.map(d=>d.class))].join(', ') : 'Unknown';
     const isVideo = rec.type === 'video';
-    const imgSrc = rec.type === 'image' && rec.result
-      ? `/static/results/${rec.result}`
-      : rec.type === 'image' && rec.original
-      ? `/static/uploads/${rec.original}` : '';
+    
+    let imgSrc = '';
+    let mediaPath = '';
+    
+    if (rec.type === 'image' && rec.result) {
+      imgSrc = `/static/results/${rec.result}`;
+      mediaPath = imgSrc;
+    } else if (rec.type === 'image' && rec.original) {
+      imgSrc = `/static/uploads/${rec.original}`;
+      mediaPath = imgSrc;
+    } else if (rec.type === 'video' && rec.result) {
+      mediaPath = `/static/results/${rec.result}`;
+    } else if (rec.type === 'video' && rec.original) {
+      mediaPath = `/static/uploads/${rec.original}`;
+    }
+
+    const cardClick = mediaPath ? `onclick="openModal('${isVideo?'video':'image'}', '${mediaPath}', '${rec.timestamp}')"` : '';
+    const clickableClass = mediaPath ? 'clickable' : '';
 
     container.insertAdjacentHTML('beforeend', `
-    <div class="h-card fade-up" style="animation-delay:${i*0.06}s">
+    <div class="h-card fade-up ${clickableClass}" style="animation-delay:${i*0.06}s" ${cardClick}>
       <div class="h-card-top" style="background:${color}"></div>
-      ${imgSrc
-        ? `<img class="h-card-img" src="${imgSrc}" alt="Detection result" onerror="this.style.display='none'">`
-        : `<div class="h-card-img-placeholder">${isVideo?'🎬':'🖼'}</div>`}
+      <div style="position:relative">
+        ${imgSrc
+          ? `<img class="h-card-img" src="${imgSrc}" alt="Detection result" onerror="this.style.display='none'">`
+          : `<div class="h-card-img-placeholder">${isVideo?'🎬':'🖼'}</div>`}
+        ${isVideo && mediaPath ? `<div class="video-overlay">▶</div>` : ''}
+      </div>
       <div class="h-card-body">
         <div class="h-card-type">
           <span class="h-type-badge" style="background:${color}22;color:${color};border:1px solid ${color}55">${label}</span>
